@@ -252,14 +252,32 @@ window.addEventListener('unhandledrejection', (e) => {
       .set('.hero__metrics', { opacity: 1 }, d(1.85))
       .to('.hero .metric', {
         opacity: 1, y: 0, duration: d(0.7), stagger: d(0.09),
-        onStart: () => {
-          document.querySelectorAll('.hero .metric__num[data-count]').forEach((el, i) => {
-            gsap.delayedCall(i * d(0.12), () => countUp(el, { duration: d(1.4) }));
-          });
-          fireMetricLoaders();
-        },
       }, d(1.85))
       .to('.hero__scroll', { opacity: 1, y: 0, duration: d(0.6) }, d(2.15));
+  }
+
+  // ──────────────────────────────────────────────
+  //  Hero metric loaders — fire on scroll into view (not during intro),
+  //  so the count-up + ring/spark/podium play right when the user reaches them.
+  //  Registered AFTER the intro would have completed, so the metrics
+  //  container is already visible when the loaders begin animating.
+  // ──────────────────────────────────────────────
+  {
+    const metricsEl = document.querySelector('.hero__metrics');
+    if (metricsEl && !reduced) {
+      const playMetrics = () => {
+        document.querySelectorAll('.hero .metric__num[data-count]').forEach((el, i) => {
+          gsap.delayedCall(i * 0.1, () => countUp(el, { duration: 1.3 }));
+        });
+        fireMetricLoaders();
+      };
+      // Wait until after the intro sequence has revealed the metrics container.
+      // safeST's own "already above viewport" check then fires playMetrics at
+      // exactly the right moment (or later, on scroll).
+      gsap.delayedCall(seenIntro ? 1.3 : 2.1, () => {
+        safeST({ trigger: metricsEl, start: 'top 82%', once: true, onEnter: playMetrics });
+      });
+    }
   }
 
   // ──────────────────────────────────────────────
