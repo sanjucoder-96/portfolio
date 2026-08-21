@@ -717,6 +717,24 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
   font-size: 0.68rem;
   text-transform: none; letter-spacing: 0.04em;
 }
+
+@media (max-width: 720px) {
+  /* On narrow screens the aspect-ratio squeezed the graph so short that the
+     HUD overlapped the nodes. Give the SVG breathing room and lift the HUD
+     out to sit below the graph instead of over it. */
+  .graphviz {
+    aspect-ratio: auto;
+    display: flex; flex-direction: column;
+  }
+  .graphviz > svg { height: 260px; flex: 0 0 auto; }
+  .graphviz__hud {
+    position: static;
+    margin: 0.75rem;
+    backdrop-filter: none;
+    background: rgba(var(--rgb-bg), 0.5);
+  }
+  .hud__row { grid-template-columns: 3.5rem 1fr; gap: 0.5rem; }
+}
 .hud__row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 1rem; align-items: baseline; }
 .hud__key { color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.62rem; }
 .hud__val { color: var(--fg); word-break: break-word; }
@@ -766,8 +784,18 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
 .flow__edge svg { width: 100%; height: 24px; }
 
 @media (max-width: 900px) {
-  .flow__row { grid-template-columns: 1fr; }
-  .flow__edge { transform: rotate(90deg); height: 24px; }
+  .flow { padding: 1.25rem; gap: 0.5rem; }
+  .flow__row { grid-template-columns: 1fr; gap: 0.4rem; }
+  /* Replace horizontal SVG arrows with a compact vertical divider — rotating
+     the wide SVG caused it to spill and read as an overlapping blur. */
+  .flow__edge { transform: none; height: 18px; }
+  .flow__edge svg { display: none; }
+  .flow__edge::after {
+    content: '';
+    width: 1px; height: 100%;
+    background: linear-gradient(180deg, var(--line-strong), transparent);
+  }
+  .flow__node { min-height: 0; padding: 0.9rem 1rem; }
 }
 
 .case__meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin-top: 2rem; }
@@ -924,8 +952,22 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
 .hook-flow__node--verdict { border-color: rgba(var(--rgb-graph), 0.35); }
 .hook-flow__arrow { width: 40px; height: 20px; color: var(--fg-4); flex-shrink: 0; }
 @media (max-width: 900px) {
-  .hook-flow { flex-direction: column; align-items: stretch; }
-  .hook-flow__arrow { transform: rotate(90deg); width: 20px; }
+  .hook-flow {
+    flex-direction: column; align-items: stretch;
+    overflow-x: visible;
+    gap: 0.4rem;
+  }
+  .hook-flow__node { width: 100%; }
+  /* Rotating the wide horizontal arrow SVG produced a blurred / overlapping
+     ghost on mobile — replace it with a slim vertical divider instead. */
+  .hook-flow__arrow {
+    width: 1px; height: 14px;
+    transform: none;
+    background: linear-gradient(180deg, var(--line-strong), transparent);
+    align-self: center;
+    color: transparent;
+  }
+  .hook-flow__arrow svg { display: none; }
 }
 
 /* ─── 3.6 PixelCrypt LSB viz ─── */
