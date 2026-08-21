@@ -1010,6 +1010,8 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
   color: var(--fg-3);
   letter-spacing: 0.02em;
   min-height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
   transition: background .3s, color .3s;
 }
 .pixel-viz__cell .pv-bit--high { opacity: 0.55; }
@@ -1036,6 +1038,21 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
 .pv-dot--data { background: rgba(var(--rgb-fg), 0.15); }
 .pv-dot--lsb { background: var(--accent-graph); }
 .pv-dot--carry { background: rgba(var(--rgb-graph), 0.35); }
+
+@media (max-width: 720px) {
+  /* At mobile widths the 12-column bit grid squeezed each cell to ~19px —
+     eight glyphs (7 high bits + 1 LSB) could not fit, so text spilled sideways
+     and read as overlapping cells. Drop to a 4-column grid, shrink the type,
+     and clip anything that would still bleed. */
+  .pixel-viz { padding: 1rem; }
+  .pixel-viz__row { grid-template-columns: 4.5rem 1fr; gap: 0.6rem; }
+  .pixel-viz__bits { font-size: 0.62rem; letter-spacing: 0.08em; line-height: 1.55; }
+  .pixel-viz__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 0.5rem; }
+  .pixel-viz__cell { padding: 0.4rem 0.3rem; font-size: 0.55rem; min-height: 26px; justify-content: center; }
+  .pv-bit--high { display: none; }  /* only the LSB carries the signal on mobile */
+  .pv-bit--lsb { padding: 0 4px; font-size: 0.72rem; font-weight: 500; }
+  .pixel-viz__legend { font-size: 0.55rem; gap: 0.75rem; }
+}
 
 /* ─── 3.4 Java window viz ─── */
 .window-viz {
