@@ -120,6 +120,7 @@
       this.mx = -9999; this.my = -9999; this.active = false;
       this.revealed = 0;
       this.revealAlpha = 0;
+      this.booted = false;
       this.bootStart = 0;
       this.bootDur = 0;
       this.visible = true;
@@ -216,11 +217,17 @@
       this.stars.sort((a, b) => a.birth - b.birth);
       this.N = this.stars.length;
 
-      // Non-hero presets reveal instantly; hero waits for boot()
-      if (this.presetName !== 'hero' && this.bootDur === 0) {
+      // Reveal state after a (re)scatter:
+      //   • non-hero presets, or the hero once its intro has played → reveal all
+      //   • hero before its first boot() → stay hidden for the reveal animation
+      // A resize rebuilds `stars`, so always clamp afterwards: a shrink must not
+      // leave `revealed` pointing past the (now shorter) array — that stale index
+      // read an undefined star and threw "Cannot read properties of undefined".
+      if (this.bootDur === 0 && (this.presetName !== 'hero' || this.booted)) {
         this.revealed = this.N;
         this.revealAlpha = 1;
       }
+      if (this.revealed > this.N) this.revealed = this.N;
     }
 
     setPointer(localX, localY, isInside) {
@@ -248,7 +255,7 @@
         const eased = 1 - Math.pow(1 - p, 3);
         this.revealed = Math.floor(eased * this.N);
         this.revealAlpha = eased;
-        if (p >= 1) this.bootDur = 0;
+        if (p >= 1) { this.bootDur = 0; this.booted = true; }
       }
 
       if (this.p.comets && !reduced && this.presetName === 'hero'
@@ -420,14 +427,14 @@
     }
 
     boot(duration = 1600) {
-      if (reduced) { this.revealed = this.N; this.revealAlpha = 1; return Promise.resolve(); }
+      if (reduced) { this.revealed = this.N; this.revealAlpha = 1; this.booted = true; return Promise.resolve(); }
       this.bootStart = performance.now();
       this.bootDur = Math.max(400, duration);
       setTimeout(() => this.launchComet(), 250);
       setTimeout(() => this.launchComet(), Math.min(this.bootDur - 200, 900));
       return new Promise((resolve) => setTimeout(resolve, this.bootDur));
     }
-    revealInstant() { this.revealed = this.N; this.revealAlpha = 1; }
+    revealInstant() { this.revealed = this.N; this.revealAlpha = 1; this.booted = true; }
     updateTheme() { readTheme(); }
   }
 
