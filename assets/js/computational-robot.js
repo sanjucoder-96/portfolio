@@ -26,6 +26,20 @@
 import * as THREE from 'three';
 import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js';
 
+/* boot() does a few hundred ms of unavoidable setup — decode, mask, density,
+   per-particle buffers, shader link. Run as one task that is a visible freeze:
+   scrolling stops and every other animation on the page stalls until it ends.
+   Yielding between phases keeps each task short. MessageChannel rather than
+   setTimeout (throttled to 1s in a background tab) or rAF (never fires in one
+   at all, which would hang boot outright). */
+const yieldToBrowser = (() => {
+  if (typeof MessageChannel !== 'function') return () => new Promise((r) => setTimeout(r, 0));
+  const ch = new MessageChannel();
+  const q = [];
+  ch.port1.onmessage = () => { const f = q.shift(); if (f) f(); };
+  return () => new Promise((r) => { q.push(r); ch.port2.postMessage(0); });
+})();
+
 const host = document.getElementById('core-stage');
 if (host) boot(host).catch((e) => console.warn('[robot] disabled:', e.message));
 
@@ -81,16 +95,22 @@ async function boot(host) {
        as a graphite-teal sculpture that still belongs to the site's family.
        Dark mode never sees these: there uUseRGB=1, so the body uses the
        sampled reference colour. */
-    col.body   = isLight ? new THREE.Color(0.235, 0.333, 0.376) : new THREE.Color(0.92, 0.93, 0.93);  // #3C5560 muted slate
-    col.body2  = isLight ? new THREE.Color(0.420, 0.522, 0.557) : new THREE.Color(0.92, 0.93, 0.93);  // #6B858E grey-teal
-    col.hi     = isLight ? new THREE.Color(0.706, 0.780, 0.800) : new THREE.Color(1.00, 1.00, 1.00);  // #B4C7CC pale grey-blue
-    col.accent = isLight ? new THREE.Color(0.243, 0.541, 0.588) : cy;                                  // #3E8A96 softened teal
+    /* Light blue family. The deepest stop stays dark enough to carry the
+       silhouette on the #F5F7FA canvas — lifting every stop would wash the
+       figure out now that density is lower — while the mid and highlight
+       stops open up into sky blue. */
+    col.body   = isLight ? new THREE.Color(0.180, 0.337, 0.467) : new THREE.Color(0.92, 0.93, 0.93);  // #2E5677 deep blue-slate
+    col.body2  = isLight ? new THREE.Color(0.380, 0.569, 0.722) : new THREE.Color(0.92, 0.93, 0.93);  // #6191B8 steel blue
+    col.hi     = isLight ? new THREE.Color(0.749, 0.851, 0.925) : new THREE.Color(1.00, 1.00, 1.00);  // #BFD9EC pale sky
+    col.accent = isLight ? new THREE.Color(0.243, 0.588, 0.800) : cy;                                  // #3E96CC clear blue
     /* Dark mode reads because the body is neutral silver and the graph is
        chromatic teal. In light mode the graph shared the body's slate-teal
        hue, so the two merged. Shifting it to indigo restores the same
        figure/object separation without reaching for orange or pink. */
-    col.node   = isLight ? new THREE.Color(0.353, 0.384, 0.722) : cy;                                  // #5A62B8 indigo
-    col.edge   = isLight ? new THREE.Color(0.682, 0.706, 0.886) : cy;                                  // #AEB4E2 pale indigo
+    /* Body is now blue, so the graph is pushed further round to indigo-violet
+       to keep the figure/object separation that dark mode gets for free. */
+    col.node   = isLight ? new THREE.Color(0.396, 0.333, 0.769) : cy;                                  // #6555C4 indigo-violet
+    col.edge   = isLight ? new THREE.Color(0.729, 0.702, 0.914) : cy;                                  // #BAB3E9
     mats.forEach((m) => {
       m.uniforms.uBody.value.copy(col.body);
       m.uniforms.uAccent.value.copy(col.accent);
@@ -248,12 +268,23 @@ async function boot(host) {
 
   /* ────────── load + pose the humanoid scaffold ────────── */
   /* ────────── reference-image reconstruction ────────── */
+  /* The reconstruction cannot start until this decodes, so its weight is
+     the hero's time-to-first-pixel. The PNG stays as the fallback for
+     engines without WebP. */
   const REF = await new Promise((res, rej) => {
     const im = new Image();
+    im.decoding = 'async';
+    let fellBack = false;
     im.onload = () => res(im);
-    im.onerror = () => rej(new Error('reference image failed to load'));
-    im.src = 'assets/references/hero-ref.png';
+    im.onerror = () => {
+      if (fellBack) { rej(new Error('reference image failed to load')); return; }
+      fellBack = true;
+      im.src = 'assets/references/hero-ref.png';
+    };
+    im.src = 'assets/references/hero-ref.webp';
   });
+
+  await yieldToBrowser();
 
   const rc = document.createElement('canvas');
   rc.width = REF.naturalWidth; rc.height = REF.naturalHeight;
@@ -261,6 +292,7 @@ async function boot(host) {
   rx.drawImage(REF, 0, 0);
   const IW = rc.width, IH = rc.height;
   const IMG = rx.getImageData(0, 0, IW, IH).data;
+  await yieldToBrowser();
 
   /* Regions measured off the reference itself:
        figure   x 0.355–0.930   y 0.077–0.979
@@ -288,10 +320,15 @@ async function boot(host) {
 
   // Build the figure mask once
   const mask = new Uint8Array(IW * IH);
-  const weight = [];                 // pixel indices, repeated by brightness
-  const cum = [];
-  let acc = 0;
-  for (let y = (FIG.y0 * IH) | 0; y < (FIG.y1 * IH) | 0; y++) {
+  /* Preallocated to the figure box: growing plain arrays to ~70k entries
+     reallocated repeatedly during boot, and the brightness CDF built here
+     was thrown away unused a few lines below. */
+  const CAP = ((((FIG.x1 - FIG.x0) * IW) | 0) + 2) * ((((FIG.y1 - FIG.y0) * IH) | 0) + 2);
+  const cand = new Int32Array(CAP);
+  let NC = 0;
+  const Y0 = (FIG.y0 * IH) | 0, Y1 = (FIG.y1 * IH) | 0;
+  for (let y = Y0; y < Y1; y++) {
+    if (y > Y0 && (y - Y0) % 256 === 0) await yieldToBrowser();
     const yn = y / IH;
     for (let x = (FIG.x0 * IW) | 0; x < (FIG.x1 * IW) | 0; x++) {
       const xn = x / IW;
@@ -308,9 +345,28 @@ async function boot(host) {
       const L = lumAt(i);
       if (L < LUM_MIN) continue;
       mask[y * IW + x] = 1;
-      acc += L - LUM_MIN + 4;                            // importance ∝ brightness
-      weight.push(y * IW + x);
-      cum.push(acc);
+      cand[NC++] = y * IW + x;
+    }
+  }
+
+  /* Horizontal run-lengths to the silhouette edge, precomputed in two linear
+     passes. Both the sampling weight and the depth estimate ask "how far is
+     this pixel from the edge of its mask run"; answering that per lookup
+     meant a scan of up to 46px, twice, for every one of ~69k candidates and
+     again for every particle. Measured against the scanning form these
+     tables produce a bit-identical candidate list and total weight. */
+  await yieldToBrowser();
+
+  const SCAN = 46;
+  const runL = new Uint8Array(IW * IH);
+  const runR = new Uint8Array(IW * IH);
+  for (let y = 0; y < IH; y++) {
+    const row = y * IW;
+    for (let x = 1; x < IW; x++) {
+      runL[row + x] = mask[row + x - 1] ? Math.min(SCAN, runL[row + x - 1] + 1) : 0;
+    }
+    for (let x = IW - 2; x >= 0; x--) {
+      runR[row + x] = mask[row + x + 1] ? Math.min(SCAN, runR[row + x + 1] + 1) : 0;
     }
   }
   /* Brightness alone treats an isolated speck the same as a point on the
@@ -319,6 +375,7 @@ async function boot(host) {
      dense and lets stray particles thin out into a halo. */
   const DS = 4;                                   // density map downscale
   const DW = Math.ceil(IW / DS), DH = Math.ceil(IH / DS);
+  await yieldToBrowser();
   const dens = new Float32Array(DW * DH);
   for (let y = 0; y < IH; y++) {
     const dy = (y / DS) | 0;
@@ -330,27 +387,42 @@ async function boot(host) {
   // box-blur the density map so the measure is neighbourhood, not cell
   const dblur = new Float32Array(DW * DH);
   const RAD = 3;
+  /* Separable. The 7x7 box is the product of a horizontal and a vertical
+     run, and the in-bounds cell count factorises the same way, so this is
+     the same number the nested form produced. */
+  await yieldToBrowser();
+  const dtmp = new Float32Array(DW * DH);
   for (let y = 0; y < DH; y++) {
     for (let x = 0; x < DW; x++) {
-      let sum = 0, n = 0;
-      for (let j = -RAD; j <= RAD; j++) {
-        const yy = y + j; if (yy < 0 || yy >= DH) continue;
-        for (let i2 = -RAD; i2 <= RAD; i2++) {
-          const xx = x + i2; if (xx < 0 || xx >= DW) continue;
-          sum += dens[yy * DW + xx]; n++;
-        }
-      }
-      dblur[y * DW + x] = n ? (sum / n) / CELL : 0;   // 0..1 occupancy
+      const i0 = x - RAD < 0 ? 0 : x - RAD, i1 = x + RAD >= DW ? DW - 1 : x + RAD;
+      let sum = 0;
+      for (let i2 = i0; i2 <= i1; i2++) sum += dens[y * DW + i2];
+      dtmp[y * DW + x] = sum / (i1 - i0 + 1);
+    }
+  }
+  for (let y = 0; y < DH; y++) {
+    const j0 = y - RAD < 0 ? 0 : y - RAD, j1 = y + RAD >= DH ? DH - 1 : y + RAD;
+    for (let x = 0; x < DW; x++) {
+      let sum = 0;
+      for (let j = j0; j <= j1; j++) sum += dtmp[j * DW + x];
+      dblur[y * DW + x] = (sum / (j1 - j0 + 1)) / CELL;   // 0..1 occupancy
     }
   }
   function densityAt(px, py) {
     return dblur[((py / DS) | 0) * DW + ((px / DS) | 0)] || 0;
   }
   // rebuild the sampling CDF with density folded in
-  acc = 0; cum.length = 0;
-  const kept = [];
-  for (let k = 0; k < weight.length; k++) {
-    const idx = weight[k];
+  /* Both arrays are sized to the candidate count up front. The old form
+     ended with Array.prototype.push.apply(weight, kept), which spreads ~70k
+     entries as call arguments -- close enough to the engine's argument
+     limit that it can throw RangeError outright on a device with less
+     stack, and boot() swallows that into a silent "hero never appears". */
+  await yieldToBrowser();
+  const weight = new Int32Array(NC);
+  const cum = new Float64Array(NC);
+  let KN = 0, acc = 0;
+  for (let k = 0; k < NC; k++) {
+    const idx = cand[k];
     const py = (idx / IW) | 0, px = idx - py * IW;
     const L = lumAt(idx * 4);
     const d = densityAt(px, py);
@@ -363,11 +435,8 @@ async function boot(host) {
        REGION  — the parts that must stay legible at a glance: head and
        temple/eye, shoulder line, and the presenting hand. */
     const gate = THREE.MathUtils.smoothstep(d, 0.045, 0.20);
-    const SCAN = 46;
-    let el = 0, er = 0;
-    while (el < SCAN && px - el - 1 >= 0 && mask[py * IW + px - el - 1]) el++;
-    while (er < SCAN && px + er + 1 < IW && mask[py * IW + px + er + 1]) er++;
-    const ed = Math.min(el, er) / SCAN;            // 0 = edge, 1 = deep interior
+    const el = runL[idx], er = runR[idx];
+    const ed = (el < er ? el : er) / SCAN;          // 0 = edge, 1 = deep interior
     // Stronger contour/interior differential: the face, temple, neck and
     // torso interiors were filling in solid. Contours keep their weight.
     const contour = 2.10 - ed * 1.75;              // 2.10 at contour → 0.35 in core
@@ -382,13 +451,12 @@ async function boot(host) {
 
     const w = gate * Math.pow(L - LUM_MIN + 4, 0.55) * contour * region;
     if (w <= 0.0001) continue;
-    acc += w; kept.push(idx); cum.push(acc);
+    acc += w; weight[KN] = idx; cum[KN] = acc; KN++;
   }
-  weight.length = 0; Array.prototype.push.apply(weight, kept);
   const TOTW = acc;
   function pickPixel() {
     const r = Math.random() * TOTW;
-    let lo = 0, hi = cum.length - 1;
+    let lo = 0, hi = KN - 1;
     while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < r) lo = m + 1; else hi = m; }
     return weight[lo];
   }
@@ -396,12 +464,10 @@ async function boot(host) {
   /* Depth from silhouette distance: a pixel deep inside the body can sit
      anywhere through its thickness, while an edge pixel is pinned near the
      surface. Scanning outward to the mask boundary approximates that. */
-  const MAXSCAN = 46;
+  const MAXSCAN = SCAN;
   function edgeDist(px, py) {
-    let l = 0, r = 0;
-    while (l < MAXSCAN && px - l - 1 >= 0 && mask[py * IW + px - l - 1]) l++;
-    while (r < MAXSCAN && px + r + 1 < IW && mask[py * IW + px + r + 1]) r++;
-    return Math.min(l, r);
+    const i = py * IW + px;
+    return runL[i] < runR[i] ? runL[i] : runR[i];
   }
 
   // world mapping — uniform scale so the figure is never distorted
@@ -433,7 +499,9 @@ async function boot(host) {
   const aRGB = new Float32Array(N * 3);
   const aRef = new Float32Array(N * 2);
 
+  await yieldToBrowser();
   for (let i = 0; i < N; i++) {
+    if (i > 0 && i % 8192 === 0) await yieldToBrowser();
     const idx = pickPixel();
     const py = (idx / IW) | 0, px = idx - py * IW;
     const xn = (px + Math.random()) / IW, yn = (py + Math.random()) / IH;
@@ -488,6 +556,7 @@ async function boot(host) {
     aRef[i * 2 + 1] = ((i / TEX) | 0) / TEX + 0.5 / TEX;
   }
 
+  await yieldToBrowser();
   const gpu = new GPUComputationRenderer(TEX, TEX, renderer);
   const dtPos = gpu.createTexture(), dtVel = gpu.createTexture();
   dtPos.image.data.set(initArr);
@@ -803,6 +872,22 @@ async function boot(host) {
   }
   resize();
   window.addEventListener('resize', resize);
+  /* One boot-time measurement is not enough. If the hero is laid out after
+     this module runs -- a page opened in a background tab, a restored
+     session, a late web font -- the canvas keeps a stale, sometimes
+     near-zero backing store and the figure never appears, with no window
+     resize event to correct it. */
+  if (typeof ResizeObserver === 'function') {
+    let lastW = 0, lastH = 0;
+    new ResizeObserver(() => {
+      const r = host.getBoundingClientRect();
+      const w = Math.round(r.width), h = Math.round(r.height);
+      if (w < 2 || h < 2) return;                  // collapsed layout: wait
+      if (w === lastW && h === lastH) return;
+      lastW = w; lastH = h;
+      resize();
+    }).observe(host);
+  }
 
   /* ────────── interaction ────────── */
   const ndc = new THREE.Vector2(-10, -10);
@@ -861,7 +946,18 @@ async function boot(host) {
   }, { passive: true });
 
   let form = 0, formTarget = 0, started = false;
-  function start() { if (started) return; started = true; formTarget = 1; if (reduced) form = 1; }
+  /* The stage is opacity:0 until .is-live, so this class is what actually
+     makes the hero visible. It used to be added only by motion.js, which
+     polls for this module and gives up after a fixed number of tries — on a
+     slow connection boot finished after that deadline and the figure stayed
+     invisible for the whole session. The module owns its own reveal now. */
+  function start() {
+    if (started) return;
+    started = true;
+    host.classList.add('is-live');
+    formTarget = 1;
+    if (reduced) form = 1;
+  }
 
   let onScreen = true;
   new IntersectionObserver((es) => es.forEach((e) => { onScreen = e.isIntersecting; }), { threshold: 0.01 }).observe(host);

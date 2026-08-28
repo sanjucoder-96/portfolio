@@ -78,19 +78,19 @@
   /* Light mode keeps the site's cyan/teal accent identity, deepened for
      contrast on the light canvas. The old amber was the "orange dominating
      the composition"; a deep indigo carries the secondary accent instead. */
-  --accent-graph:  #2E6E7E;   /* muted teal — primary accent */
-  --accent-warm:   #4C6584;   /* muted indigo — replaces amber */
-  --accent-agent:  #3C5560;   /* slate */
+  --accent-graph:  #2E6E96;   /* blue — primary accent */
+  --accent-warm:   #5566A0;   /* indigo — replaces amber */
+  --accent-agent:  #2E5677;   /* deep blue-slate */
   --accent-java:   #B91C1C;
   --accent-hero:   #0F172A;
 
-  --rgb-graph:     46, 110, 126;
-  --rgb-warm:      76, 101, 132;
-  --rgb-agent:     60, 85, 96;
+  --rgb-graph:     46, 110, 150;
+  --rgb-warm:      85, 102, 160;
+  --rgb-agent:     46, 86, 119;
   --rgb-fg:        15, 23, 42;
   --rgb-fg-3:      100, 116, 139;
   --rgb-bg:        245, 247, 250;
-  --canvas-edge:   118, 138, 148;   /* muted slate */
+  --canvas-edge:   118, 140, 160;   /* blue-slate */
 }
 
 /* Smooth theme transition — brief and only on toggle.

@@ -219,11 +219,14 @@ window.addEventListener('unhandledrejection', (e) => {
   function revealCore() {
     const stage = document.getElementById('core-stage');
     if (!stage) return;
+    /* The hero module reveals itself now, so this is only a nudge. The old
+       9s ceiling was a real failure mode: a slow reference-image fetch put
+       boot past the deadline and the stage was left at opacity 0. */
     let tries = 0;
     (function wait() {
       const core = window.__computationalCore;
       if (core) { core.boot(); stage.classList.add('is-live'); return; }
-      if (++tries > 60) return;              // ~9s, then stop polling
+      if (++tries > 400) return;             // ~60s, then stop polling
       setTimeout(wait, 150);
     })();
   }
