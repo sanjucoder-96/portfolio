@@ -153,6 +153,9 @@
   <section id="home" class="hero">
     <canvas id="hero-canvas" class="hero__canvas" data-constellation="hero" aria-hidden="true"></canvas>
 
+    <!-- Computational Core — 3D particle structure (rendered at runtime, no image) -->
+    <div id="core-stage" class="core-stage" aria-hidden="true"></div>
+
     <div class="hero__grid" aria-hidden="true">
       <div class="hero__vline"></div><div class="hero__vline"></div>
       <div class="hero__vline"></div><div class="hero__vline"></div>
@@ -371,23 +374,10 @@
 
       <div class="case__stage">
         <!-- Interactive graph visual -->
-        <div class="graphviz" aria-label="Illustrative Neo4j graph traversal">
-          <svg id="graph-svg" viewBox="0 0 800 520" preserveAspectRatio="xMidYMid meet" role="img">
-            <defs>
-              <radialGradient id="node-gradient" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="var(--accent-graph)" stop-opacity=".9"/>
-                <stop offset="100%" stop-color="var(--accent-graph)" stop-opacity="0"/>
-              </radialGradient>
-              <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="3" result="blur"/>
-                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-              </filter>
-            </defs>
-            <g id="graph-edges" stroke="currentColor" stroke-opacity=".18" fill="none"></g>
-            <g id="graph-trace" stroke="var(--accent-graph)" stroke-width="1.5" fill="none"></g>
-            <g id="graph-nodes"></g>
-            <g id="graph-labels" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor" fill-opacity=".55"></g>
-          </svg>
+        <div class="graphviz" aria-label="Interactive 3D Neo4j graph traversal — drag to rotate">
+          <canvas id="graph-canvas" role="img"
+                  aria-label="Rotating 3D property graph of GST entities with a highlighted circular-trade cycle"></canvas>
+          <span class="graphviz__hint mono" aria-hidden="true">drag to rotate</span>
 
           <div class="graphviz__hud mono">
             <div class="hud__row"><span class="hud__key">cypher</span><span class="hud__val" id="cypher-line">MATCH (a:Entity)-[:INVOICE*1..5]->(a)</span></div>
@@ -1293,6 +1283,7 @@
         <span>© 2026 Sanjay Utchula</span>
         <span>Hyderabad · IN</span>
         <span>Built by hand — HTML, CSS, GSAP</span>
+        <span>Hero figure: Mixamo &ldquo;Xbot&rdquo; rig, rendered as particles</span>
       </div>
     </footer>
   </section>
@@ -1302,11 +1293,24 @@
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
 
-  <script src="assets/js/hero-canvas.js"></script>
+  <script src="assets/js/constellation.js"></script>
   <script src="assets/js/graph-viz.js"></script>
   <script src="assets/js/dsa-canvas.js"></script>
   <script src="assets/js/pixel-viz.js"></script>
   <script src="assets/js/main.js"></script>
   <script src="assets/js/motion.js"></script>
+
+  <!-- Three.js is loaded as an ES module only for the hero particle core.
+       If the CDN is unreachable the module simply never runs and the hero
+       falls back to the constellation canvas — nothing else depends on it. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="assets/js/computational-robot.js"></script>
 </body>
 </html>

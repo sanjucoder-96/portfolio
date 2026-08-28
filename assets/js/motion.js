@@ -211,6 +211,24 @@ window.addEventListener('unhandledrejection', (e) => {
   window.__fireMetricLoaders = fireMetricLoaders;
 
   // ──────────────────────────────────────────────
+  //  Computational Core hand-off
+  //  particle-system.js is an ES module fetched separately, so it may
+  //  resolve after the intro runs. Poll briefly, then give up quietly —
+  //  the hero still works without it.
+  // ──────────────────────────────────────────────
+  function revealCore() {
+    const stage = document.getElementById('core-stage');
+    if (!stage) return;
+    let tries = 0;
+    (function wait() {
+      const core = window.__computationalCore;
+      if (core) { core.boot(); stage.classList.add('is-live'); return; }
+      if (++tries > 60) return;              // ~9s, then stop polling
+      setTimeout(wait, 150);
+    })();
+  }
+
+  // ──────────────────────────────────────────────
   //  2. Intro master timeline
   // ──────────────────────────────────────────────
   function runIntro() {
@@ -224,6 +242,7 @@ window.addEventListener('unhandledrejection', (e) => {
       gsap.set('.hero .metric', { opacity: 1, y: 0 });
       gsap.set('.section__title .wtext, .case__title .wtext, .contact__title .wtext', { yPercent: 0 });
       canvas?.revealInstant?.();
+      revealCore();
       document.querySelectorAll('.hero .metric__num[data-count]').forEach((el) => {
         const target = parseFloat(el.dataset.count);
         if (!Number.isNaN(target)) el.textContent = String(el.dataset.count).includes('.') ? target.toFixed(2) : String(target);
@@ -236,8 +255,11 @@ window.addEventListener('unhandledrejection', (e) => {
     // Base durations, scaled for return visits
     const d = (v) => Math.max(0.15, v * (S > 0 ? S : 0.4));
 
-    // 1. Boot the canvas
+    // 1. Boot the canvas + the 3D core (the core IS the entrance spectacle —
+    //    no separate loader overlay). The module may still be fetching, so
+    //    also arm a fallback that reveals it whenever it finishes.
     if (canvas?.boot) canvas.boot(1600 * (S > 0 ? S : 0.5));
+    revealCore();
 
     const tl = gsap.timeline({
       defaults: { ease: 'expo.out' },
@@ -587,6 +609,22 @@ window.addEventListener('unhandledrejection', (e) => {
         const withHover = e.target.closest(hoverSelector);
         if (withHover) cursor.classList.remove('is-hover');
       });
+
+      // ── Computational Core — reuses this same cursor, never a second one ──
+      let coreLabelTimer = 0;
+      /* The cursor is deliberately left alone over the graph. `is-label`
+         grows the ring 32px → 90px (see .cursor.is-label .cursor__ring), which
+         reads as a magnifier on top of everything else already moving. The
+         graph signals interactivity through its own nodes and edges. */
+      document.addEventListener('core:hover', () => {});
+      document.addEventListener('core:rebuild', () => {
+        label.textContent = 'rebuild';
+        clearTimeout(coreLabelTimer);
+        coreLabelTimer = setTimeout(() => {
+          if (window.__computationalCore?.isOverCore?.()) label.textContent = 'interact';
+          else cursor.classList.remove('is-label');
+        }, 1400);
+      });
     } else if (cursor) {
       cursor.style.display = 'none';
     }
@@ -684,7 +722,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
   // ──────────────────────────────────────────────
   //  12. Run intro on first paint
-  //  Kinetic Grid canvas handles its own boot phase inline in hero-canvas.js
+  //  The constellation field + 3D core handle their own boot phases internally
   // ──────────────────────────────────────────────
   const kick = () => {
     try { runIntro(); } catch (e) { console.warn('runIntro failed:', e.message); }

@@ -1,94 +1,258 @@
-/* GraphGST — animated Neo4j-style graph with Cypher traversal */
+/* GraphGST — 3D property graph with Cypher traversal
+   ────────────────────────────────────────────────────
+   A real 3D scene rendered with canvas 2D: nodes are placed on a
+   Fibonacci sphere, rotated by 3x3 matrices, projected with
+   perspective, then painted back-to-front (painter's algorithm) so
+   depth reads correctly. No WebGL, no dependency.
+
+   Depth drives size, opacity, and glow, so the graph genuinely
+   feels volumetric rather than like a flat ring. Drag to orbit;
+   release and it eases back into slow auto-rotation.
+
+   The Cypher HUD loop is preserved — the traced cycle is now a
+   3D polyline that travels through the sphere.                    */
+
 (() => {
-  const svg = document.getElementById('graph-svg');
-  if (!svg) return;
+  const canvas = document.getElementById('graph-canvas');
+  if (!canvas) return;
 
-  const NS = 'http://www.w3.org/2000/svg';
-  const W = 800, H = 520;
+  const ctx = canvas.getContext('2d', { alpha: true });
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
-  // Layout: a ring of 12 "entities" with a highlighted cycle a→b→c→d→e→a
+  // ── Theme ────────────────────────────────────
+  const pal = { fg: '242,241,234', graph: '124,217,192', warm: '229,178,93', edge: '180,200,195' };
+  function readTheme() {
+    const s = getComputedStyle(document.documentElement);
+    pal.fg    = (s.getPropertyValue('--rgb-fg')    || pal.fg).trim();
+    pal.graph = (s.getPropertyValue('--rgb-graph') || pal.graph).trim();
+    pal.warm  = (s.getPropertyValue('--rgb-warm')  || pal.warm).trim();
+    pal.edge  = (s.getPropertyValue('--canvas-edge') || pal.edge).trim();
+  }
+  readTheme();
+  window.addEventListener('themechange', readTheme);
+
+  // ── Build the graph in 3D ────────────────────
+  const N_RING = 18;   // outer entities on the sphere
+  const N_CORE = 3;    // inner hub nodes
   const nodes = [];
-  const cx = W * 0.5, cy = H * 0.5;
-  const R  = 190;
-  const count = 12;
-  for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
+
+  // Fibonacci sphere — evenly distributes points, no clustering at poles
+  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < N_RING; i++) {
+    const y = 1 - (i / (N_RING - 1)) * 2;      // 1 → -1
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = GOLDEN * i;
     nodes.push({
-      id: `E${(i + 1).toString().padStart(2,'0')}`,
-      x: cx + Math.cos(angle) * R + (i % 3 === 0 ? -20 : 15),
-      y: cy + Math.sin(angle) * R + (i % 2 === 0 ? 8 : -12),
+      id: `E${(i + 1).toString().padStart(2, '0')}`,
+      x: Math.cos(theta) * r,
+      y: y,
+      z: Math.sin(theta) * r,
+      core: false,
+      pulse: Math.random() * Math.PI * 2,
     });
   }
-  // A few inner nodes
-  nodes.push({ id: 'HUB', x: cx, y: cy });
-  nodes.push({ id: 'E13', x: cx + 60, y: cy - 40 });
-  nodes.push({ id: 'E14', x: cx - 70, y: cy + 30 });
-
-  // Non-cycle edges
-  const edges = [
-    [0, 12], [1, 12], [2, 13], [3, 13], [4, 13], [5, 12], [6, 12],
-    [7, 12], [8, 14], [9, 14], [10, 14], [11, 14],
-    [12, 13], [12, 14], [13, 14],
-    [0, 2], [1, 4], [3, 6], [5, 8], [7, 10], [9, 11], [11, 0],
+  // Inner hubs sit near the centre — they read as "deeper" in the volume
+  const cores = [
+    { id: 'HUB', x: 0,     y: 0,     z: 0 },
+    { id: 'GSTIN', x: 0.34, y: 0.22, z: -0.2 },
+    { id: 'ITC',  x: -0.3, y: -0.26, z: 0.24 },
   ];
+  cores.forEach((c) => nodes.push({ ...c, core: true, pulse: Math.random() * Math.PI * 2 }));
 
-  // Cycle to trace (circular trading)
-  const cycle = [1, 4, 7, 10, 12, 1]; // hub included
+  const HUB = N_RING, GSTIN = N_RING + 1, ITC = N_RING + 2;
 
-  const edgesG   = svg.querySelector('#graph-edges');
-  const traceG   = svg.querySelector('#graph-trace');
-  const nodesG   = svg.querySelector('#graph-nodes');
-  const labelsG  = svg.querySelector('#graph-labels');
+  // Edges: spokes into the three hubs, hub interlinks, plus peripheral chords
+  const edges = [];
+  for (let i = 0; i < N_RING; i++) {
+    const hub = i % 3 === 0 ? HUB : i % 3 === 1 ? GSTIN : ITC;
+    edges.push([i, hub]);
+  }
+  edges.push([HUB, GSTIN], [HUB, ITC], [GSTIN, ITC]);
+  for (let i = 0; i < N_RING; i += 2) edges.push([i, (i + 5) % N_RING]);
+  for (let i = 1; i < N_RING; i += 4) edges.push([i, (i + 3) % N_RING]);
 
-  // Draw edges
-  edges.forEach(([a, b]) => {
-    const line = document.createElementNS(NS, 'line');
-    line.setAttribute('x1', nodes[a].x);
-    line.setAttribute('y1', nodes[a].y);
-    line.setAttribute('x2', nodes[b].x);
-    line.setAttribute('y2', nodes[b].y);
-    edgesG.appendChild(line);
+  // The circular-trade cycle Cypher surfaces
+  const cycle = [2, 7, 11, HUB, 15, 2];
+  const cycleSet = new Set(cycle);
+
+  // ── Camera / interaction state ───────────────
+  let rotY = 0.4, rotX = -0.25;
+  let velY = 0.0016, velX = 0;      // idle auto-orbit
+  let dragging = false, lastX = 0, lastY = 0;
+  let visible = true;
+  let traceT = -1;                   // -1 = idle, 0..1 = cycle drawing progress
+  const FOV = 3.2;
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    canvas.width  = Math.max(1, r.width) * DPR;
+    canvas.height = Math.max(1, r.height) * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    W = Math.max(1, r.width);
+    H = Math.max(1, r.height);
+    RAD = Math.min(W, H) * 0.34;
+  }
+  let W = 1, H = 1, RAD = 100;
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Project a node into screen space with the current rotation
+  function project(n) {
+    const cy = Math.cos(rotY), sy = Math.sin(rotY);
+    const cx = Math.cos(rotX), sx = Math.sin(rotX);
+    // rotate about Y
+    const x1 =  n.x * cy - n.z * sy;
+    const z1 =  n.x * sy + n.z * cy;
+    // rotate about X
+    const y2 =  n.y * cx - z1 * sx;
+    const z2 =  n.y * sx + z1 * cx;
+    const scale = FOV / (FOV + z2);
+    return {
+      sx: W / 2 + x1 * RAD * scale,
+      sy: H / 2 + y2 * RAD * scale,
+      z: z2,
+      scale,
+      depth: (z2 + 1) / 2,   // 0 = near, 1 = far
+    };
+  }
+
+  // ── Pointer orbit ────────────────────────────
+  canvas.addEventListener('pointerdown', (e) => {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+    canvas.parentElement?.classList.add('is-grabbed');
   });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    rotY += dx * 0.008;
+    rotX += dy * 0.006;
+    rotX = Math.max(-1.2, Math.min(1.2, rotX));
+    velY = dx * 0.0011;
+    velX = dy * 0.0008;
+  });
+  const endDrag = () => { dragging = false; canvas.style.cursor = 'grab'; };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.style.cursor = 'grab';
 
-  // Draw nodes
-  nodes.forEach((n, i) => {
-    const g = document.createElementNS(NS, 'g');
-    g.setAttribute('transform', `translate(${n.x},${n.y})`);
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { visible = e.isIntersecting; });
+  }, { threshold: 0.05 });
+  io.observe(canvas);
 
-    const halo = document.createElementNS(NS, 'circle');
-    halo.setAttribute('r', 18);
-    halo.setAttribute('fill', 'url(#node-gradient)');
-    halo.setAttribute('opacity', '0');
-    halo.setAttribute('data-halo', i);
-    g.appendChild(halo);
+  // ── Render loop ──────────────────────────────
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!visible) return;
 
-    const ring = document.createElementNS(NS, 'circle');
-    ring.setAttribute('r', i >= 12 ? 8 : 6);
-    ring.setAttribute('fill', 'none');
-    ring.setAttribute('stroke', 'currentColor');
-    ring.setAttribute('stroke-opacity', '0.4');
-    ring.setAttribute('stroke-width', '1');
-    g.appendChild(ring);
-
-    const dot = document.createElementNS(NS, 'circle');
-    dot.setAttribute('r', i >= 12 ? 3.2 : 2.4);
-    dot.setAttribute('fill', 'currentColor');
-    dot.setAttribute('fill-opacity', '0.7');
-    dot.setAttribute('data-dot', i);
-    g.appendChild(dot);
-
-    nodesG.appendChild(g);
-
-    if (i < 12 || i === 12) {
-      const label = document.createElementNS(NS, 'text');
-      label.setAttribute('x', n.x + 12);
-      label.setAttribute('y', n.y - 8);
-      label.textContent = n.id;
-      labelsG.appendChild(label);
+    if (!dragging) {
+      // ease velocity back toward the idle orbit rate
+      velY += (0.0016 - velY) * 0.02;
+      velX += (0 - velX) * 0.04;
+      rotY += velY;
+      rotX += velX;
+      rotX += Math.sin(now * 0.00013) * 0.00035;   // gentle bob
+      rotX = Math.max(-1.2, Math.min(1.2, rotX));
     }
-  });
 
-  // Cypher lines to rotate through
+    ctx.clearRect(0, 0, W, H);
+
+    // Project everything once
+    const P = nodes.map(project);
+
+    // ── Edges, sorted far → near ──
+    const edgeList = edges.map(([a, b]) => ({
+      a, b, z: (P[a].z + P[b].z) / 2,
+      hot: cycleSet.has(a) && cycleSet.has(b),
+    })).sort((m, n) => n.z - m.z);
+
+    edgeList.forEach((e) => {
+      const A = P[e.a], B = P[e.b];
+      const near = 1 - (A.depth + B.depth) / 2;      // 1 = closest
+      const alpha = 0.05 + near * 0.16;
+      ctx.strokeStyle = `rgba(${pal.edge},${alpha.toFixed(3)})`;
+      ctx.lineWidth = 0.4 + near * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(A.sx, A.sy);
+      ctx.lineTo(B.sx, B.sy);
+      ctx.stroke();
+    });
+
+    // ── Traced cycle (3D polyline) ──
+    if (traceT >= 0) {
+      const segs = cycle.length - 1;
+      const total = traceT * segs;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (let s = 0; s < segs; s++) {
+        const f = Math.max(0, Math.min(1, total - s));
+        if (f <= 0) break;
+        const A = P[cycle[s]], B = P[cycle[s + 1]];
+        const near = 1 - (A.depth + B.depth) / 2;
+        ctx.strokeStyle = `rgba(${pal.graph},${(0.45 + near * 0.5).toFixed(3)})`;
+        ctx.lineWidth = 1.1 + near * 1.5;
+        ctx.shadowColor = `rgba(${pal.graph},0.5)`;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(A.sx, A.sy);
+        ctx.lineTo(A.sx + (B.sx - A.sx) * f, A.sy + (B.sy - A.sy) * f);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // ── Nodes, sorted far → near ──
+    const order = P.map((p, i) => i).sort((a, b) => P[b].z - P[a].z);
+
+    order.forEach((i) => {
+      const n = nodes[i], p = P[i];
+      const near = 1 - p.depth;                        // 1 = closest to camera
+      const isHot = traceT >= 0 && cycleSet.has(i);
+      const base = (n.core ? 4.2 : 2.6) * p.scale;
+      const twinkle = 0.85 + Math.sin(now * 0.0011 + n.pulse) * 0.15;
+      const r = base * (isHot ? 1.5 : 1);
+      const rgb = isHot ? pal.graph : (n.core ? pal.graph : pal.fg);
+      const alpha = (0.2 + near * 0.75) * twinkle * (isHot ? 1 : 0.9);
+
+      // Volumetric halo — stronger the nearer the node is
+      const glowR = r * (isHot ? 7 : n.core ? 5 : 3.4);
+      const g = ctx.createRadialGradient(p.sx, p.sy, r * 0.3, p.sx, p.sy, glowR);
+      g.addColorStop(0, `rgba(${rgb},${(alpha * (isHot ? 0.5 : 0.22)).toFixed(3)})`);
+      g.addColorStop(1, `rgba(${rgb},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ring
+      ctx.strokeStyle = `rgba(${rgb},${(alpha * 0.45).toFixed(3)})`;
+      ctx.lineWidth = 0.8 * p.scale;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, r * 2.1, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Core dot
+      ctx.fillStyle = `rgba(${rgb},${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Labels only on near-side nodes, so the back of the sphere stays clean
+      if (near > 0.55 && (n.core || i % 2 === 0)) {
+        ctx.font = `${(8.5 * p.scale).toFixed(1)}px "JetBrains Mono", ui-monospace, monospace`;
+        ctx.fillStyle = `rgba(${rgb},${((near - 0.55) * 1.5).toFixed(3)})`;
+        ctx.textAlign = 'left';
+        ctx.fillText(n.id, p.sx + r * 2.6, p.sy - r * 1.6);
+      }
+    });
+  }
+  requestAnimationFrame(frame);
+
+  // ── Cypher HUD loop ──────────────────────────
   const cypherLines = [
     'MATCH (a:Entity)-[:INVOICE*1..5]->(a)',
     'MATCH (a)-[r:GSTIN]->(b) WHERE r.pattern="circular"',
@@ -98,12 +262,11 @@
   const cypherEl = document.getElementById('cypher-line');
   const nodeCountEl = document.getElementById('node-count');
   const detectEl = document.getElementById('detect-line');
-
-  let cypherIdx = 0;
-  let running = false;
+  let cypherIdx = 0, running = false;
 
   function typeText(el, text, speed = 20) {
     return new Promise((resolve) => {
+      if (!el) return resolve();
       el.textContent = '';
       let i = 0;
       const step = () => {
@@ -116,46 +279,18 @@
     });
   }
 
-  function highlightCycle() {
-    // Build path
-    let pathD = '';
-    cycle.forEach((idx, i) => {
-      const n = nodes[idx];
-      pathD += (i === 0 ? 'M' : 'L') + n.x + ',' + n.y + ' ';
-    });
-    const path = document.createElementNS(NS, 'path');
-    path.setAttribute('d', pathD);
-    path.setAttribute('stroke', 'var(--accent-graph)');
-    path.setAttribute('stroke-width', '1.8');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke-dasharray', '4 4');
-    traceG.innerHTML = '';
-    traceG.appendChild(path);
-
-    const len = path.getTotalLength();
-    path.style.strokeDasharray = len;
-    path.style.strokeDashoffset = len;
-    path.style.transition = 'stroke-dashoffset 2s cubic-bezier(.7,0,.2,1)';
-    requestAnimationFrame(() => { path.style.strokeDashoffset = 0; });
-
-    // Highlight cycle nodes
-    cycle.forEach((idx, i) => {
-      const halo = svg.querySelector(`[data-halo="${idx}"]`);
-      const dot = svg.querySelector(`[data-dot="${idx}"]`);
-      setTimeout(() => {
-        if (halo) { halo.style.transition = 'opacity .4s'; halo.style.opacity = '0.9'; }
-        if (dot) { dot.setAttribute('fill', 'var(--accent-graph)'); dot.setAttribute('fill-opacity', '1'); }
-      }, i * 350);
-    });
-  }
-
-  function fadeCycle() {
-    traceG.innerHTML = '';
-    cycle.forEach((idx) => {
-      const halo = svg.querySelector(`[data-halo="${idx}"]`);
-      const dot = svg.querySelector(`[data-dot="${idx}"]`);
-      if (halo) halo.style.opacity = '0';
-      if (dot) { dot.setAttribute('fill', 'currentColor'); dot.setAttribute('fill-opacity', '0.7'); }
+  function animateTrace(to, duration) {
+    return new Promise((resolve) => {
+      const from = traceT < 0 ? 0 : traceT;
+      const start = performance.now();
+      const tick = (t) => {
+        const p = Math.min(1, (t - start) / duration);
+        const eased = 1 - Math.pow(1 - p, 3);
+        traceT = from + (to - from) * eased;
+        if (p < 1) requestAnimationFrame(tick);
+        else resolve();
+      };
+      requestAnimationFrame(tick);
     });
   }
 
@@ -163,25 +298,21 @@
     if (running) return;
     running = true;
     while (running) {
-      const line = cypherLines[cypherIdx % cypherLines.length];
-      cypherIdx++;
-      await typeText(cypherEl, line, 22);
-      await typeText(nodeCountEl, `${(Math.random() * 400 + 800).toFixed(0)} entities · ${(Math.random() * 6000 + 3000).toFixed(0)} edges`, 12);
-      await new Promise(r => setTimeout(r, 300));
-      highlightCycle();
+      await typeText(cypherEl, cypherLines[cypherIdx++ % cypherLines.length], 22);
+      await typeText(nodeCountEl,
+        `${(Math.random() * 400 + 800).toFixed(0)} entities · ${(Math.random() * 6000 + 3000).toFixed(0)} edges`, 12);
+      await new Promise(r => setTimeout(r, 250));
+      traceT = 0;
+      await animateTrace(1, reduced ? 1 : 1900);
       await typeText(detectEl, '1 circular trade cycle · 5 entities · flagged', 15);
-      await new Promise(r => setTimeout(r, 3200));
-      fadeCycle();
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 3400));
+      traceT = -1;
+      await new Promise(r => setTimeout(r, 450));
     }
   }
 
-  // Start when in view
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach((e) => {
-      if (e.isIntersecting) loop();
-      else running = false;
-    });
+  const io2 = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) loop(); else running = false; });
   }, { threshold: 0.25 });
-  io.observe(svg);
+  io2.observe(canvas);
 })();

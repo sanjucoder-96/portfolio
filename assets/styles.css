@@ -75,20 +75,22 @@
   --fg-3:          #64748B;   /* slate-500 — mono metadata */
   --fg-4:          #94A3B8;   /* slate-400 */
 
-  /* Stronger, more saturated accents against the brighter canvas */
-  --accent-graph:  #0891B2;   /* cyan-600 */
-  --accent-warm:   #B45309;   /* amber-700 */
-  --accent-agent:  #6D28D9;   /* violet-700 */
+  /* Light mode keeps the site's cyan/teal accent identity, deepened for
+     contrast on the light canvas. The old amber was the "orange dominating
+     the composition"; a deep indigo carries the secondary accent instead. */
+  --accent-graph:  #2E6E7E;   /* muted teal — primary accent */
+  --accent-warm:   #4C6584;   /* muted indigo — replaces amber */
+  --accent-agent:  #3C5560;   /* slate */
   --accent-java:   #B91C1C;
   --accent-hero:   #0F172A;
 
-  --rgb-graph:     8, 145, 178;
-  --rgb-warm:      180, 83, 9;
-  --rgb-agent:     109, 40, 217;
+  --rgb-graph:     46, 110, 126;
+  --rgb-warm:      76, 101, 132;
+  --rgb-agent:     60, 85, 96;
   --rgb-fg:        15, 23, 42;
   --rgb-fg-3:      100, 116, 139;
   --rgb-bg:        245, 247, 250;
-  --canvas-edge:   100, 116, 139;   /* cool slate for graph */
+  --canvas-edge:   118, 138, 148;   /* muted slate */
 }
 
 /* Smooth theme transition — brief and only on toggle.
@@ -331,6 +333,71 @@ p { margin: 0; }
 }
 :root[data-theme="light"] .hero__canvas { opacity: 1; }
 
+/* ─── Computational Core — 3D particle stage ───
+   Sits above the constellation canvas but below the hero copy, so the
+   headline always wins the visual hierarchy. Pointer events are off:
+   hit-testing is done manually against the core's projected radius so
+   the CTA buttons underneath stay fully clickable. */
+.core-stage {
+  position: absolute; inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s var(--e-out);
+}
+.core-stage.is-live { opacity: 1; }
+.core-stage canvas { display: block; width: 100%; height: 100%; }
+
+/* Hard guarantee that no particle ever lands on the copy: the stage
+   itself fades out across the text column. Geometry alone can drift
+   with viewport size — this cannot. */
+@media (min-width: 1100px) {
+  .core-stage {
+    /* Fades in before the hand/graph so the presenting gesture is never
+       clipped, while still guaranteeing nothing lands on the headline. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0 31%, #000 42% 100%);
+            mask-image: linear-gradient(to right, transparent 0 31%, #000 42% 100%);
+  }
+}
+@media (min-width: 700px) and (max-width: 1099px) {
+  .core-stage {
+    -webkit-mask-image: linear-gradient(to right, transparent 0 30%, #000 48% 100%);
+            mask-image: linear-gradient(to right, transparent 0 30%, #000 48% 100%);
+  }
+}
+
+.core-labels { position: absolute; inset: 0; pointer-events: none; }
+.core-label {
+  position: absolute; top: 0; left: 0;
+  font-size: 0.56rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent-graph);
+  padding: 0.18rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--accent-graph) 30%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity .6s var(--e-out);
+  will-change: transform, opacity;
+}
+.core-label.is-on { opacity: 1; }
+
+/* Cursor affordance while the pointer is over the core */
+/* The core hover deliberately does NOT resize the cursor ring. Scaling it
+   read as a magnifying-glass / zoom effect over the graph. The graph
+   responds through its own nodes and edges instead. */
+
+@media (max-width: 760px) {
+  /* Simplified presence on phones — the core stays, at lower cost */
+  .core-stage { opacity: 0; }
+  .core-stage.is-live { opacity: 0.55; }
+  .core-label { font-size: 0.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .core-stage { transition: none; }
+  .core-label { display: none; }
+}
+
 /* Reusable constellation background canvas for other sections
    (Stack / DSA / Contact). Positioned behind content, receives no
    pointer events itself — routing is done via document.mousemove
@@ -370,6 +437,18 @@ p { margin: 0; }
 .hero__title   { grid-row: 2; }
 .hero__body    { grid-row: 3; }
 .hero__cta     { grid-row: 4; }
+
+/* On wide screens the hero copy is confined to the left column so the
+   particle rig owns the right half without ever crossing the text.
+   This also shortens the headline measure, which reads better anyway. */
+@media (min-width: 1100px) {
+  .hero__eyebrow,
+  .hero__title,
+  .hero__body,
+  .hero__cta,
+  .hero__metrics { max-width: min(53%, 43rem); }
+  .hero__metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+}
 .hero__metrics { grid-row: 6; align-self: end; }
 
 .hero__eyebrow {
@@ -389,6 +468,19 @@ p { margin: 0; }
   color: var(--accent-hero);
   margin: 0;
 }
+/* Column-scaled headline. The base size is tuned to the full viewport, but
+   on wide screens the copy is confined to a half-width column — at 9vw it
+   wrapped to 676px and pushed the hero far past 100svh. Specificity is
+   raised deliberately: a plain .hero__title here would lose to the rule
+   above purely on source order. */
+@media (min-width: 1100px) {
+  .hero__inner .hero__title { font-size: clamp(2.2rem, 3.25vw, 3.1rem); }
+  /* .hero__line--sub carries its own size and would otherwise stay at 72px */
+  .hero__inner .hero__line--sub { font-size: clamp(1.7rem, 2.55vw, 2.5rem); }
+  .hero__inner { gap: clamp(0.7rem, 1.3vw, 1.2rem); }
+  .hero { padding-top: clamp(5rem, 7vw, 6.5rem); }
+}
+
 .hero__line { display: block; overflow: hidden; padding-bottom: 0.1em; }
 .hero__line-inner { display: block; will-change: transform; }
 .hero__line--sub { font-size: clamp(2rem, 5vw, 4.6rem); color: var(--fg); letter-spacing: -0.03em; line-height: 1.05; margin-top: 0.15em; }
@@ -704,7 +796,22 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
   border-radius: 14px;
   overflow: hidden;
 }
-.graphviz > svg { width: 100%; height: 100%; color: var(--fg-3); }
+.graphviz > canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+
+/* "drag to rotate" affordance — fades out once the user has grabbed it */
+.graphviz__hint {
+  position: absolute; top: 0.9rem; right: 1rem;
+  font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--fg-4);
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(var(--rgb-bg), 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  transition: opacity .5s var(--e-out);
+}
+.graphviz.is-grabbed .graphviz__hint { opacity: 0; }
 
 .graphviz__hud {
   position: absolute; left: 1rem; bottom: 1rem; right: 1rem;
@@ -726,7 +833,8 @@ section > article { max-width: var(--maxw); margin-left: auto; margin-right: aut
     aspect-ratio: auto;
     display: flex; flex-direction: column;
   }
-  .graphviz > svg { height: 260px; flex: 0 0 auto; }
+  .graphviz > canvas { height: 280px; flex: 0 0 auto; }
+  .graphviz__hint { top: 0.6rem; right: 0.6rem; font-size: 0.52rem; }
   .graphviz__hud {
     position: static;
     margin: 0.75rem;
