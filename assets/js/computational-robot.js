@@ -57,10 +57,15 @@ async function boot(host) {
   let tier = vw < 640 ? 'mobile' : vw < 1100 ? 'tablet' : (cores <= 4 ? 'tablet' : 'desktop');
   /* Simulation is texture-backed, so particle count is a texture size.
      256² = 65,536 particles all carrying real position + velocity state. */
+  /* Counts are matched to the area each tier actually renders into, not to
+     raw device capability. The phone figure occupies roughly a twentieth of
+     the desktop figure's area, so carrying the desktop-ish count put ~0.5
+     particles per CSS pixel against desktop's 0.10 and the figure read as a
+     dense blob instead of a particle field. */
   const BUDGET = {
     desktop: { tex: 180, graphNodes: 10 },   // 32,400 visible
     tablet:  { tex: 148, graphNodes: 9 },    // 21,904
-    mobile:  { tex: 112, graphNodes: 8 },    // 12,544
+    mobile:  { tex: 80,  graphNodes: 8 },    // 6,400 — see below
   }[tier];
   BUDGET.body = BUDGET.tex * BUDGET.tex;
 
@@ -772,9 +777,14 @@ async function boot(host) {
 
   /* ────────── the floating graph ────────── */
   const GR = FIG_H * 0.058;                             // ~9% of figure height
+  const GRAPH_PHONE = 1.9;      // cube enlargement on phones, tuned by measurement
+  /* resize() owns the resting size; the frame loop multiplies its recompute
+     pulse on top. Setting the scale outright in either place loses the other. */
+  let graphBase = 1;
   // Sit the graph just above the open palm — GR*3.4 put it ~260px clear of
   // the hand, which broke the 'presenting a model' read entirely.
-  graphGroup.position.set(wrist.x - GR * 0.20, wrist.y + GR * 1.30, wrist.z + 0.20);
+  const GRAPH_HOME = new THREE.Vector3(wrist.x - GR * 0.20, wrist.y + GR * 1.30, wrist.z + 0.20);
+  graphGroup.position.copy(GRAPH_HOME);
 
   const NG = BUDGET.graphNodes;
   const nodes = [];
@@ -907,11 +917,25 @@ async function boot(host) {
     const pre = new Int32Array(hh + 1);
     for (let y = 0; y < hh; y++) pre[y + 1] = pre[y] + rows[y];
 
+    /* Grow as well as shrink. The width fit is driven by the reference's
+       1.5:1 frame, but the figure only occupies the middle of that frame, so
+       on a portrait phone it lands far smaller than the column can carry.
+       Nothing above the current size clears the copy outright, and holding
+       out for zero overlap kept shrinking it, so allow a small budget: the
+       largest size whose bounding box covers no more than TOL of itself in
+       text. The figure's own ink fills under a third of that box, so the
+       overlap actually seen is a fraction of the budget. */
+    /* TOL is measured against the home-extent box, which is wider than the
+       ink the figure actually paints, so the true overlap runs well under
+       this number. Calibrated against rendered pixels, not derived. */
+    const TOL = 0.02;
     let fit = null;
-    for (const k of [1, 0.94, 0.88, 0.82, 0.76]) {
+    for (const k of [1.3, 1.2, 1.1, 1, 0.9, 0.8]) {
       const sc = sc0 * k;
       const figH = Math.round((HOME_Y1 - HOME_Y0) * sc / visH * hh);
+      const figW = Math.round((HOME_X1 - HOME_X0) * sc / visW * hw);
       if (figH < 8 || figH >= hh) continue;
+      if (figW > hw * 0.92) continue;              // keep it inside the column
       let bestTop = -1, bestCost = Infinity;
       for (let top = 0; top + figH <= hh; top++) {
         const cost = pre[top + figH] - pre[top];
@@ -920,10 +944,11 @@ async function boot(host) {
       if (bestTop < 0) continue;
       // screenY(wy) = hh * (0.5 - (wy * sc + py) / visH); solve for the figure top
       const py = visH * (0.5 - bestTop / hh) - HOME_Y1 * sc;
-      if (!fit || bestCost < fit.cost) fit = { scale: sc, py, cost: bestCost };
-      if (bestCost === 0) break;                    // biggest clean fit wins
+      const frac = bestCost / (figW * figH);
+      if (!fit || frac < fit.frac) fit = { scale: sc, py, frac };
+      if (frac <= TOL) break;                       // biggest acceptable fit wins
     }
-    return fit || { scale: sc0, py: fallbackY, cost: -1 };
+    return fit || { scale: sc0, py: fallbackY, frac: 1 };
   }
 
   function resize() {
@@ -957,10 +982,25 @@ async function boot(host) {
        occupies is left alone so the composition still reads right-of-centre.
        Measured from the live layout rather than a tuned constant, so it
        still holds when the copy rewraps. */
+    /* The cube rides inside the rig, so shrinking the figure shrinks it too
+       — on a phone its 8 nodes collapsed into a single clump a few pixels
+       across. Give it back roughly the share of the figure it holds on the
+       desktop composition. */
     if (W < 700) {
       const fit = mobileFit(sc, visH, visW, py);
       if (fit) { rig.scale.setScalar(fit.scale); py = fit.py; }
+      graphBase = GRAPH_PHONE;
+      /* Scaling happens about the cube's own centre, so a bigger cube grows
+         down into the palm it is supposed to float above. Lift it by what it
+         gained on the way down. */
+      graphGroup.position.set(GRAPH_HOME.x,
+                              GRAPH_HOME.y + GR * (GRAPH_PHONE - 1) * 0.95,
+                              GRAPH_HOME.z);
+    } else {
+      graphBase = 1;
+      graphGroup.position.copy(GRAPH_HOME);
     }
+    graphGroup.scale.setScalar(graphBase);
     rig.position.set(visW > WORLD_W ? (visW - WORLD_W) * 0.5 : 0, py, 0);
   }
   resize();
@@ -1205,7 +1245,7 @@ async function boot(host) {
       graphGroup.rotation.y += dt * 0.20;
       graphGroup.rotation.x = Math.sin(t * 0.21) * 0.1 + tilt.x;
       graphGroup.rotation.z = tilt.y * 0.4;
-      graphGroup.scale.setScalar(1 + recompute * 0.12);
+      graphGroup.scale.setScalar(graphBase * (1 + recompute * 0.12));
     }
     // the palm answers whatever the graph is doing, at a fraction of its strength
     let peak = 0;
