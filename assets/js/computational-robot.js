@@ -46,7 +46,13 @@ if (host) boot(host).catch((e) => console.warn('[robot] disabled:', e.message));
 async function boot(host) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const vw = window.innerWidth;
+  /* A viewport narrower than any real device means the window has not been
+     laid out yet — a background tab, a restoring session. The particle
+     budget is a texture size fixed when the simulation is allocated, so
+     trusting that measurement locks the lowest density in for the whole
+     session even after the window opens to full width. */
+  const vwRaw = window.innerWidth || 0;
+  const vw = vwRaw >= 320 ? vwRaw : (window.screen && window.screen.width) || 1280;
   const cores = navigator.hardwareConcurrency || 4;
   let tier = vw < 640 ? 'mobile' : vw < 1100 ? 'tablet' : (cores <= 4 ? 'tablet' : 'desktop');
   /* Simulation is texture-backed, so particle count is a texture size.
