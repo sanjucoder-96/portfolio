@@ -562,6 +562,17 @@ async function boot(host) {
     aRef[i * 2 + 1] = ((i / TEX) | 0) / TEX + 0.5 / TEX;
   }
 
+  /* Vertical extent of the reconstructed figure, needed to place it against
+     real page elements rather than against the reference's proportions. */
+  let HOME_X0 = Infinity, HOME_X1 = -Infinity, HOME_Y0 = Infinity, HOME_Y1 = -Infinity;
+  for (let i = 0; i < N; i++) {
+    const x = homeArr[i * 4], y = homeArr[i * 4 + 1];
+    if (x < HOME_X0) HOME_X0 = x;
+    if (x > HOME_X1) HOME_X1 = x;
+    if (y < HOME_Y0) HOME_Y0 = y;
+    if (y > HOME_Y1) HOME_Y1 = y;
+  }
+
   await yieldToBrowser();
   const gpu = new GPUComputationRenderer(TEX, TEX, renderer);
   const dtPos = gpu.createTexture(), dtVel = gpu.createTexture();
@@ -852,6 +863,69 @@ async function boot(host) {
      own aspect, so framing is a fit — not a set of tuned offsets. On screens
      wider than the reference the right edges are aligned, which is what puts
      the figure hard right exactly as in the source. */
+  /* Rows of the hero occupied by text, then the largest size and the
+     vertical position that keep the figure off them. Ties break downward,
+     which keeps the presenting hand low in the frame the way the reference
+     has it. Full size rarely clears the CTA row on a phone, so a slightly
+     smaller fit that sits completely clear beats a bigger one with a button
+     sitting on the shoulder. */
+  function mobileFit(sc0, visH, visW, fallbackY) {
+    const heroEl = host.closest('section') || host.parentElement;
+    if (!heroEl) return null;
+    const hero = heroEl.getBoundingClientRect();
+    const hw = Math.round(hero.width), hh = Math.round(hero.height);
+    if (hw < 2 || hh < 2) return null;
+
+    const rows = new Int32Array(hh + 1);
+    /* Collected once at full width — the column narrows with scale, so the
+       widest candidate is the safe bound and the cost is a slight
+       overestimate for the smaller ones. */
+    const colX0 = Math.round(hw * (0.5 + HOME_X0 * sc0 / visW));
+    const colX1 = Math.round(hw * (0.5 + HOME_X1 * sc0 / visW));
+    const walker = document.createTreeWalker(heroEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue.trim()) continue;
+      const p = node.parentElement;
+      if (!p || p.closest('#core-stage')) continue;
+      const cs = getComputedStyle(p);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+      const rg = document.createRange();
+      rg.selectNodeContents(node);
+      const boxes = rg.getClientRects();
+      for (let i = 0; i < boxes.length; i++) {
+        const r = boxes[i];
+        if (r.width < 3 || r.height < 3) continue;
+        const bx0 = Math.max(colX0, Math.round(r.left - hero.left));
+        const bx1 = Math.min(colX1, Math.round(r.right - hero.left));
+        if (bx1 <= bx0) continue;                   // outside the figure's column
+        const by0 = Math.max(0, Math.round(r.top - hero.top));
+        const by1 = Math.min(hh, Math.round(r.bottom - hero.top));
+        for (let y = by0; y < by1; y++) rows[y] += bx1 - bx0;
+      }
+    }
+    const pre = new Int32Array(hh + 1);
+    for (let y = 0; y < hh; y++) pre[y + 1] = pre[y] + rows[y];
+
+    let fit = null;
+    for (const k of [1, 0.94, 0.88, 0.82, 0.76]) {
+      const sc = sc0 * k;
+      const figH = Math.round((HOME_Y1 - HOME_Y0) * sc / visH * hh);
+      if (figH < 8 || figH >= hh) continue;
+      let bestTop = -1, bestCost = Infinity;
+      for (let top = 0; top + figH <= hh; top++) {
+        const cost = pre[top + figH] - pre[top];
+        if (cost <= bestCost) { bestCost = cost; bestTop = top; }  // ties go lower
+      }
+      if (bestTop < 0) continue;
+      // screenY(wy) = hh * (0.5 - (wy * sc + py) / visH); solve for the figure top
+      const py = visH * (0.5 - bestTop / hh) - HOME_Y1 * sc;
+      if (!fit || bestCost < fit.cost) fit = { scale: sc, py, cost: bestCost };
+      if (bestCost === 0) break;                    // biggest clean fit wins
+    }
+    return fit || { scale: sc0, py: fallbackY, cost: -1 };
+  }
+
   function resize() {
     const r = host.getBoundingClientRect();
     W = Math.max(1, r.width); H = Math.max(1, r.height);
@@ -873,8 +947,21 @@ async function boot(host) {
     const currentTopPx = 0.075 * H;              // measured crown position
     const targetTopPx = navH + 42;               // clearance below the ribbon
     const shiftPx = Math.max(0, targetTopPx - currentTopPx);
-    rig.position.set(visW > WORLD_W ? (visW - WORLD_W) * 0.5 : 0,
-                     -(shiftPx / H) * visH, 0);
+    let py = -(shiftPx / H) * visH;
+
+    /* Phones stack the copy across the full width, so the horizontal mask
+       that keeps particles off the text on wider screens has nothing to bite
+       on — the fit centres the figure and it sat on top of the body
+       paragraph. Slide it vertically to the emptiest row instead. Only the
+       offset changes: same fit, same scale, same geometry, and the column it
+       occupies is left alone so the composition still reads right-of-centre.
+       Measured from the live layout rather than a tuned constant, so it
+       still holds when the copy rewraps. */
+    if (W < 700) {
+      const fit = mobileFit(sc, visH, visW, py);
+      if (fit) { rig.scale.setScalar(fit.scale); py = fit.py; }
+    }
+    rig.position.set(visW > WORLD_W ? (visW - WORLD_W) * 0.5 : 0, py, 0);
   }
   resize();
   window.addEventListener('resize', resize);
