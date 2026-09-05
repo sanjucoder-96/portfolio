@@ -27,7 +27,15 @@ window.addEventListener('unhandledrejection', (e) => {
   try {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const hoverable = matchMedia('(hover: hover) and (pointer: fine)').matches;
-  const seenIntro = sessionStorage.getItem('su_intro') === '1';
+  /* Reading storage THROWS rather than returning null when a browser is set
+     to block site data — a private window with strict settings, or an
+     enterprise policy. Unguarded, that took this whole file down with it:
+     no scroll reveals, no theme toggle, no intro. */
+  const store = {
+    get(area, k) { try { return window[area].getItem(k); } catch (e) { return null; } },
+    set(area, k, v) { try { window[area].setItem(k, v); } catch (e) { /* not persisted */ } },
+  };
+  const seenIntro = store.get('sessionStorage', 'su_intro') === '1';
   const introScale = reduced ? 0 : (seenIntro ? 0.55 : 1);
 
   gsap.registerPlugin(ScrollTrigger);
@@ -251,7 +259,7 @@ window.addEventListener('unhandledrejection', (e) => {
         if (!Number.isNaN(target)) el.textContent = String(el.dataset.count).includes('.') ? target.toFixed(2) : String(target);
       });
       fireMetricLoaders(true);
-      sessionStorage.setItem('su_intro', '1');
+      store.set('sessionStorage', 'su_intro', '1');
       return;
     }
 
@@ -266,7 +274,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
     const tl = gsap.timeline({
       defaults: { ease: 'expo.out' },
-      onComplete: () => sessionStorage.setItem('su_intro', '1'),
+      onComplete: () => store.set('sessionStorage', 'su_intro', '1'),
     });
 
     tl.to('.hero__eyebrow', { opacity: 1, y: 0, duration: d(0.7) }, d(0.15))
@@ -700,13 +708,13 @@ window.addEventListener('unhandledrejection', (e) => {
     }
     if (theme === 'light') root.setAttribute('data-theme', 'light');
     else root.removeAttribute('data-theme');
-    localStorage.setItem('su_theme', theme);
+    store.set('localStorage', 'su_theme', theme);
     // notify visualizations
     window.__heroCanvas?.updateTheme?.();
     window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
   }
   // read persisted preference (no animation on initial apply)
-  const saved = localStorage.getItem('su_theme');
+  const saved = store.get('localStorage', 'su_theme');
   if (saved === 'light' || saved === 'dark') applyTheme(saved, false);
 
   document.querySelectorAll('.theme-toggle').forEach((btn) => {

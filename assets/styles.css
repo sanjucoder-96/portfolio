@@ -355,14 +355,22 @@ p { margin: 0; }
   .core-stage {
     /* Fades in before the hand/graph so the presenting gesture is never
        clipped, while still guaranteeing nothing lands on the headline. */
+    /* These gradients carry their shape in ALPHA: transparent hides, #000
+       shows. Read as luminance instead, #000 is zero and the whole stage
+       disappears. match-source is supposed to resolve to alpha for a gradient,
+       but saying so explicitly costs nothing and removes the ambiguity. */
     -webkit-mask-image: linear-gradient(to right, transparent 0 31%, #000 42% 100%);
             mask-image: linear-gradient(to right, transparent 0 31%, #000 42% 100%);
+    -webkit-mask-mode: alpha;
+            mask-mode: alpha;
   }
 }
 @media (min-width: 700px) and (max-width: 1099px) {
   .core-stage {
     -webkit-mask-image: linear-gradient(to right, transparent 0 30%, #000 48% 100%);
             mask-image: linear-gradient(to right, transparent 0 30%, #000 48% 100%);
+    -webkit-mask-mode: alpha;
+            mask-mode: alpha;
   }
 }
 
@@ -1517,6 +1525,7 @@ img.tech__mark {
   z-index: 0;
   mask-image: radial-gradient(ellipse 90% 70% at 50% 40%, black 40%, transparent 100%);
   -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 40%, black 40%, transparent 100%);
+  mask-mode: alpha; -webkit-mask-mode: alpha;
 }
 /* No body-child z-index override needed — the ::before pseudo (z-index: 0)
    paints first in DOM order, so body children render on top naturally.
@@ -1851,6 +1860,7 @@ img.tech__mark {
   background-position: 0 0;
   mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+  mask-mode: alpha; -webkit-mask-mode: alpha;
   min-height: 100px;
 }
 

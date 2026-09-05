@@ -40,10 +40,68 @@ const yieldToBrowser = (() => {
   return () => new Promise((r) => { q.push(r); ch.port2.postMessage(0); });
 })();
 
+/* Can this document read its own canvas pixels back? Privacy modes and
+   anti-fingerprinting settings interfere with getImageData, and the whole
+   reconstruction is a canvas readback of the reference image — so when it is
+   blocked or heavily randomised the figure silently never forms. */
+function canvasReadbackOK() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 4;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgb(200,120,40)';
+  x.fillRect(0, 0, 4, 4);
+  const d = x.getImageData(0, 0, 4, 4).data;
+  return Math.abs(d[0] - 200) < 12 && Math.abs(d[1] - 120) < 12 && Math.abs(d[2] - 40) < 12;
+}
+
+/* Everything a failure report needs, so one look at the console says which
+   capability is missing instead of just "it didn't work". */
+function heroDiagnostics(err) {
+  const info = { error: err ? err.message : null, ua: navigator.userAgent };
+  try { info.canvasReadback = canvasReadbackOK(); }
+  catch (e) { info.canvasReadback = 'threw: ' + e.message; }
+  try {
+    const c = document.createElement('canvas');
+    const gl2 = c.getContext('webgl2');
+    const gl = gl2 || c.getContext('webgl');
+    info.webgl2 = !!gl2;
+    info.webgl = !!gl;
+    if (gl) {
+      info.colorBufferFloat = !!gl.getExtension('EXT_color_buffer_float');
+      info.textureFloat = !!gl.getExtension('OES_texture_float');
+      info.vertexTextureUnits = gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS);
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      info.gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    }
+  } catch (e) { info.glProbe = 'threw: ' + e.message; }
+  return info;
+}
+
 const host = document.getElementById('core-stage');
-if (host) boot(host).catch((e) => console.warn('[robot] disabled:', e.message));
+if (host) {
+  boot(host).then(() => {
+    window.__coreDiag = Object.assign({ ok: true }, heroDiagnostics(null));
+  }).catch((e) => {
+    window.__coreDiag = Object.assign({ ok: false }, heroDiagnostics(e));
+    console.error('[hero] particle figure disabled:', e.message,
+                  '\nDiagnostics (also on window.__coreDiag):', window.__coreDiag);
+  });
+}
 
 async function boot(host) {
+  /* three r169 needs WebGL2, and the simulation needs to render into float
+     textures. Firefox keeps a far more aggressive GPU/driver blocklist than
+     Chrome, so this is the difference that actually bites in the field.
+     Checked up front: without it the failure surfaces only after the whole
+     reference reconstruction has already run. */
+  {
+    const probe = document.createElement('canvas').getContext('webgl2');
+    if (!probe) throw new Error('WebGL2 unavailable (driver blocklisted or disabled) — check about:support');
+    if (!probe.getExtension('EXT_color_buffer_float')) {
+      throw new Error('EXT_color_buffer_float unavailable — cannot run the particle simulation');
+    }
+  }
+
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* A viewport narrower than any real device means the window has not been
@@ -360,6 +418,15 @@ async function boot(host) {
     }
   }
 
+  /* A blocked or randomised canvas readback yields an empty mask, and every
+     later step then divides by zero and writes NaN positions — a blank hero
+     with no error anywhere. Fail loudly instead. */
+  if (NC < 2000) {
+    throw new Error('reference sampling found only ' + NC + ' candidate pixels; '
+      + 'canvas pixel readback appears blocked or empty '
+      + '(readbackOK=' + (() => { try { return canvasReadbackOK(); } catch (e) { return 'threw'; } })() + ')');
+  }
+
   /* Horizontal run-lengths to the silhouette edge, precomputed in two linear
      passes. Both the sampling weight and the depth estimate ask "how far is
      this pixel from the edge of its mask run"; answering that per lookup
@@ -509,6 +576,11 @@ async function boot(host) {
   const aLum = new Float32Array(N);
   const aRGB = new Float32Array(N * 3);
   const aRef = new Float32Array(N * 2);
+  /* Assembly ordering. Raw distance from a head anchor now, normalised into
+     a 0..1 delay once the spread is known. Structure alone reads as a wipe
+     and pure noise reads as static, so the two are mixed. */
+  const aDelay = new Float32Array(N);
+  const ANCHOR_X = 0.67, ANCHOR_Y = 0.17;        // crown/temple, in reference coords
 
   await yieldToBrowser();
   for (let i = 0; i < N; i++) {
@@ -544,6 +616,7 @@ async function boot(host) {
     initArr[i * 4 + 1] = hy + oy;
     initArr[i * 4 + 2] = z + oz;
     initArr[i * 4 + 3] = 1;
+    aDelay[i] = Math.hypot(xn - ANCHOR_X, (yn - ANCHOR_Y) * (IH / IW));
 
     const cyanness = THREE.MathUtils.clamp((G / Math.max(1, R) - 1.44) * 0.80, 0, 1);
     aTone[i] = cyanness;
@@ -599,11 +672,22 @@ async function boot(host) {
     velInit[i*4 + 3] = 0;
   }
 
+  /* Normalise the anchor distances, then blend in a seeded jitter. 0.62/0.38
+     keeps head → shoulders → arm → hand legible as an order while leaving
+     every particle its own arrival moment, so it reads as reconstruction
+     rather than a scan line. */
+  let dMax = 0;
+  for (let i = 0; i < N; i++) if (aDelay[i] > dMax) dMax = aDelay[i];
+  for (let i = 0; i < N; i++) {
+    const dn = dMax > 0 ? aDelay[i] / dMax : 0;
+    aDelay[i] = Math.min(1, 0.62 * dn + 0.38 * Math.random());
+  }
+
   const homeTex = new THREE.DataTexture(homeArr, TEX, TEX, THREE.RGBAFormat, THREE.FloatType);
   homeTex.needsUpdate = true;
   // spawn positions kept addressable so the intro can be an eased path
   const startArr = new Float32Array(initArr);
-  for (let i = 0; i < N; i++) startArr[i * 4 + 3] = homeArr[i * 4 + 3];   // carry the seed
+  for (let i = 0; i < N; i++) startArr[i * 4 + 3] = aDelay[i];   // carry the assembly delay
   const startTex = new THREE.DataTexture(startArr, TEX, TEX, THREE.RGBAFormat, THREE.FloatType);
   startTex.needsUpdate = true;
 
@@ -650,8 +734,9 @@ async function boot(host) {
     }`, dtVel);
 
   const posVar = gpu.addVariable('texturePosition', `
-    uniform float uDt, uIntro;
+    uniform float uDt, uIntro, uTime;
     uniform sampler2D tStart, tHomeP;
+    float hash11(float p){ p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
     void main(){
       vec2 uv = gl_FragCoord.xy / resolution.xy;
       vec4 posS = texture2D(texturePosition, uv);
@@ -661,15 +746,38 @@ async function boot(host) {
       if (uIntro > 0.0001) {
         vec4 st = texture2D(tStart, uv);
         vec3 home = texture2D(tHomeP, uv).xyz;
-        float seed = st.w;
-        /* Eased, staggered convergence. easeOutCubic arrives with zero
-           velocity, so there is nothing left to oscillate — the cause of the
-           "vibrate then settle" on the previous spring-driven intro. */
-        // finishes at uIntro ≈ 0.1 rather than exactly 0, so the hand-off to
-        // physics happens after every particle is already at rest at home
-        float prog = clamp((1.0 - uIntro - seed * 0.18) / 0.72, 0.0, 1.0);
+        float delay = st.w;                       // 0..1 assembly order
+        float u = 1.0 - uIntro;
+
+        /* Each particle spends TRAVEL of the window in flight and starts
+           somewhere inside SPAN, so arrivals are spread across most of the
+           sequence instead of the whole field moving as one. SPAN + TRAVEL
+           stops short of 1.0: the tail is time where everything is already
+           home and only uIntro is fading, so physics never takes over a
+           particle that is still moving. */
+        float prog = clamp((u - delay * 0.42) / 0.46, 0.0, 1.0);
+        /* easeOutCubic arrives with zero velocity, so there is nothing left
+           to oscillate and nothing overshoots the reference position. */
         float e = 1.0 - pow(1.0 - prog, 3.0);
         vec3 introPos = mix(st.xyz, home, e);
+
+        float r1 = hash11(delay * 91.7 + home.y * 3.1);
+        float r2 = hash11(delay * 57.3 + home.x * 4.7);
+        float r3 = hash11(delay * 23.9 + home.z * 6.3);
+
+        /* Bend the approach. sin() is zero at both ends of the flight, so the
+           arrival point is untouched and the settled silhouette is still
+           exactly the reference geometry. */
+        float bow = sin(e * 3.14159265);
+        introPos += (vec3(r1, r2, r3) - 0.5) * bow * 0.9;
+
+        /* Particles still waiting drift rather than hang frozen. Gone within
+           a moment of departure. */
+        float idle = 1.0 - smoothstep(0.0, 0.12, prog);
+        introPos += vec3(sin(uTime * 0.70 + r1 * 40.0),
+                         sin(uTime * 0.61 + r2 * 40.0),
+                         sin(uTime * 0.53 + r3 * 40.0)) * 0.16 * idle;
+
         simPos = mix(simPos, introPos, uIntro);
       }
       gl_FragColor = vec4(simPos, posS.w);
@@ -698,6 +806,7 @@ async function boot(host) {
   vu.uDt = { value: 1 };
   posVar.material.uniforms.uDt = { value: 1 };
   posVar.material.uniforms.uIntro = { value: 1 };
+  posVar.material.uniforms.uTime = { value: 0 };
   posVar.material.uniforms.tStart = { value: startTex };
   posVar.material.uniforms.tHomeP = { value: homeTex };
   const gpuErr = gpu.init();
@@ -710,6 +819,7 @@ async function boot(host) {
   bgeo.setAttribute('aSizeM', new THREE.BufferAttribute(aSizeM, 1));
   bgeo.setAttribute('aLum', new THREE.BufferAttribute(aLum, 1));
   bgeo.setAttribute('aRGB', new THREE.BufferAttribute(aRGB, 3));
+  bgeo.setAttribute('aDelay', new THREE.BufferAttribute(aDelay, 1));
   bgeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 60);
 
   const bodyMat = new THREE.ShaderMaterial({
@@ -721,15 +831,21 @@ async function boot(host) {
       uBody2: { value: new THREE.Color(1, 1, 1) },
       uHi: { value: new THREE.Color(1, 1, 1) },
       uAccent: { value: new THREE.Color(0, 1, 0.8) },
-      uLight: { value: 0 }, uForm: { value: 0 },
+      uLight: { value: 0 }, uForm: { value: 0 }, uIntro: { value: 1 },
       uNear: { value: 12.0 }, uFar: { value: 22.0 },
     },
     vertexShader: `
-      attribute vec2 aRef; attribute float aTone, aSizeM, aLum; attribute vec3 aRGB;
+      attribute vec2 aRef; attribute float aTone, aSizeM, aLum, aDelay; attribute vec3 aRGB;
       uniform sampler2D tPos, tVel;
-      uniform float uPR, uNear, uFar, uForm, uPtScale;
-      varying float vTone, vLum, vDepth, vSpeed; varying vec3 vRGB;
+      uniform float uPR, uNear, uFar, uForm, uPtScale, uIntro;
+      varying float vTone, vLum, vDepth, vSpeed, vAsm, vLock; varying vec3 vRGB;
       void main(){
+        /* Same schedule the position shader runs, so presence tracks each
+           particle's own flight: faint while scattered, full on arrival.
+           uIntro 0 puts every particle at 1, i.e. the settled state. */
+        float aProg = clamp(((1.0 - uIntro) - aDelay * 0.42) / 0.46, 0.0, 1.0);
+        vAsm = 1.0 - pow(1.0 - aProg, 3.0);
+        vLock = sin(clamp((vAsm - 0.55) / 0.45, 0.0, 1.0) * 3.14159265);
         vec3 p = texture2D(tPos, aRef).xyz;
         vec3 v = texture2D(tVel, aRef).xyz;
         vSpeed = clamp(length(v) * 5.0, 0.0, 1.0);   // motion lights particles up
@@ -738,12 +854,12 @@ async function boot(host) {
         float dist = -mv.z;
         vDepth = 1.0 - clamp((dist - uNear) / (uFar - uNear), 0.0, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = aSizeM * uPtScale * uPR * (135.0 / max(1.0, dist)) * (0.55 + vDepth * 0.5) * (1.0 + vSpeed * 0.7);
+        gl_PointSize = aSizeM * uPtScale * uPR * (135.0 / max(1.0, dist)) * (0.55 + vDepth * 0.5) * (1.0 + vSpeed * 0.7) * (1.0 + vLock * 0.22);
       }`,
     fragmentShader: `
       precision mediump float;
       uniform vec3 uBody, uBody2, uHi, uAccent; uniform float uOpacity, uLight, uForm, uDesat;
-      varying float vTone, vLum, vDepth, vSpeed; varying vec3 vRGB;
+      varying float vTone, vLum, vDepth, vSpeed, vAsm, vLock; varying vec3 vRGB;
       void main(){
         vec2 c = gl_PointCoord - 0.5;
         float d = length(c);
@@ -763,12 +879,22 @@ async function boot(host) {
         // pull chroma out toward the particle's own luminance
         // (identifiers beginning with gl_ are reserved in GLSL — naming this
         //  gl_ silently failed shader compilation and blanked the field)
+        /* A brief accent as a particle settles — the "found its place" beat.
+           vLock is zero once assembled, so this costs nothing afterwards and
+           the resting palette is untouched. */
+        colr = mix(colr, uAccent, vLock * 0.16);
         float lumaOut = dot(colr, vec3(0.2126, 0.7152, 0.0722));
         colr = mix(colr, vec3(lumaOut), uDesat);
         float glow = uLight > 0.5 ? a : a + pow(a, 6.0) * (0.02 + vSpeed * 0.5);
         float atmo = 0.34 + vDepth * 0.66;
         float lum = (0.30 + vLum * 1.0) + vSpeed * 0.4;
-        gl_FragColor = vec4(colr, glow * uOpacity * atmo * lum * clamp(uForm * 1.4, 0.0, 1.0));
+        /* Scattered particles read as a faint field and gain presence as they
+           arrive, so the silhouette accumulates instead of fading in whole.
+           Squared so presence is held back until a particle is close to home:
+           a linear ramp lit the whole in-flight cloud and the midpoint of the
+           assembly read as a bright mass rather than a figure resolving. */
+        float asmA = mix(0.16, 1.0, vAsm * vAsm) + vLock * 0.18;
+        gl_FragColor = vec4(colr, glow * uOpacity * atmo * lum * asmA * clamp(uForm * 1.4, 0.0, 1.0));
       }`,
   });
   const body = { pts: new THREE.Points(bgeo, bodyMat), mat: bodyMat, gpu, velU: vu };
@@ -1096,8 +1222,14 @@ async function boot(host) {
   new IntersectionObserver((es) => es.forEach((e) => { onScreen = e.isIntersecting; }), { threshold: 0.01 }).observe(host);
 
   function sync(t, fade, over) {
+    /* The graph settles a beat after the hand that presents it, rather than
+       resolving in parallel with the body it belongs to. */
+    const introV = body.velU.uIntro.value;
+    const gForm = introV > 0.0001
+      ? Math.min(form, THREE.MathUtils.smoothstep(1 - introV, 0.50, 0.96))
+      : form;
     mats.forEach((m) => {
-      m.uniforms.uTime.value = t; m.uniforms.uForm.value = form;
+      m.uniforms.uTime.value = t; m.uniforms.uForm.value = gForm;
       m.uniforms.uStrength.value = strength; m.uniforms.uPR.value = renderer.getPixelRatio();
     });
     // the body is simulated on the GPU; it only needs presentation uniforms
@@ -1111,7 +1243,10 @@ async function boot(host) {
     bu.uLight.value = isLight ? 1 : 0;
     graphPts.mat.uniforms.uCursor.value.copy(graphCursor);
     packetPts.mat.uniforms.uCursor.value.set(999, 999, 999);
-    const ph = (a, b) => THREE.MathUtils.clamp((form - a) / (b - a), 0, 1);
+    /* Runs on the lagged graph clock so the hull, edges and nodes all wait
+       for the hand, instead of the cube outlining itself in mid-air while
+       the body is still converging. Identical to form once assembled. */
+    const ph = (a, b) => THREE.MathUtils.clamp((gForm - a) / (b - a), 0, 1);
     /* Dark marks on a light ground read heavier than light marks on dark at
        equal alpha, which is what made light mode look dense. Light mode gets
        lower opacity and slightly smaller points to match the perceived
@@ -1256,8 +1391,13 @@ async function boot(host) {
        field can always reconstruct the exact reference geometry. */
     const gv = body.velU;
     // ~850ms of stiffened spring, then the normal resting physics
-    gv.uIntro.value = Math.max(0, gv.uIntro.value - dt / 0.95);   // ~0.95s assembly
-    body.gpu.variables[1].material.uniforms.uIntro.value = gv.uIntro.value;
+    /* Assembly length. Long enough to watch the figure reconstruct itself,
+       short enough not to hold the page hostage. */
+    gv.uIntro.value = Math.max(0, gv.uIntro.value - dt / 1.55);
+    const pu = body.gpu.variables[1].material.uniforms;
+    pu.uIntro.value = gv.uIntro.value;
+    pu.uTime.value = t;
+    body.mat.uniforms.uIntro.value = gv.uIntro.value;
     gv.uCursor.value.copy(bodyCursor);
     gv.uActive.value = inside ? 1 : 0;
     gv.uDt.value = Math.min(1.5, dt * 60);   // cap keeps the integrator stable after a stall
@@ -1298,7 +1438,8 @@ async function boot(host) {
       body.gpu.variables[1].material.uniforms.uDt.value = 1;
     },
     _settle: (n) => { for (let i = 0; i < n; i++) body.gpu.compute(); bindSim(); },
-    _intro: (v) => { body.velU.uIntro.value = v; body.gpu.variables[1].material.uniforms.uIntro.value = v; },
+    _intro: (v) => { body.velU.uIntro.value = v; body.gpu.variables[1].material.uniforms.uIntro.value = v;
+                     body.mat.uniforms.uIntro.value = v; },
     _residual: () => {
       const rt = body.gpu.getCurrentRenderTarget(body.gpu.variables[1]);
       const buf = new Float32Array(TEX * TEX * 4);
