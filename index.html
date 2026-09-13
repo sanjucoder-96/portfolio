@@ -3,16 +3,52 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+
+  <!-- Content Security Policy. GitHub Pages cannot send HTTP headers, so the
+       document-level policy lives here. Inline script/style are unavoidable in
+       this build (importmap, gtag bootstrap, many inline style attributes), so
+       'unsafe-inline' is required; the strong header-only controls
+       (X-Frame-Options, HSTS, X-Content-Type-Options, Permissions-Policy) are
+       documented for Cloudflare. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self' mailto:; img-src 'self' data: https://www.googletagmanager.com https://*.google-analytics.com; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; connect-src 'self' https://cdn.jsdelivr.net https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+
   <title>Sanjay Utchula — AI · Backend · Knowledge Graphs</title>
   <meta name="description" content="Sanjay Utchula — B.Tech CSE. Building AI systems, backend infrastructure, and Neo4j knowledge graphs. National hackathon winner (GraphGST). AI Intern at Sociovia." />
-  <meta name="theme-color" content="#0A0A0B" />
+  <link rel="canonical" href="https://sanjayutchula.me/" />
+  <meta name="author" content="Sanjay Utchula" />
+  <meta name="keywords" content="Sanjay Utchula, backend engineer, AI engineer, knowledge graphs, Neo4j, Spring Boot, Java, Python, GraphGST, Sociovia, GRIET, Hyderabad" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#F5F7FA" media="(prefers-color-scheme: light)" />
 
+  <!-- Open Graph -->
   <meta property="og:title" content="Sanjay Utchula — AI · Backend · Knowledge Graphs" />
   <meta property="og:description" content="Engineering knowledge graphs, AI governance, and production backends." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://sanjayutchula.me/" />
+  <meta property="og:site_name" content="Sanjay Utchula" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:image" content="https://sanjayutchula.me/assets/og-cover.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Sanjay Utchula — engineering knowledge graphs, AI governance and production backends." />
+
+  <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Sanjay Utchula — AI · Backend · Knowledge Graphs" />
+  <meta name="twitter:description" content="Engineering knowledge graphs, AI governance, and production backends." />
+  <meta name="twitter:image" content="https://sanjayutchula.me/assets/og-cover.png" />
+  <meta name="twitter:image:alt" content="Sanjay Utchula portfolio cover." />
+
+  <!-- Icons / manifest -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap"
@@ -20,8 +56,35 @@
   />
 
   <link rel="stylesheet" href="assets/styles.css" />
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "name": "Sanjay Utchula",
+    "url": "https://sanjayutchula.me/",
+    "image": "https://sanjayutchula.me/assets/og-cover.png",
+    "jobTitle": "AI Intern & Backend Engineer",
+    "email": "mailto:sanjayutchula09@gmail.com",
+    "worksFor": { "@type": "Organization", "name": "Sociovia" },
+    "alumniOf": { "@type": "CollegeOrUniversity", "name": "GRIET, Hyderabad" },
+    "address": { "@type": "PostalAddress", "addressLocality": "Hyderabad", "addressCountry": "IN" },
+    "knowsAbout": ["Knowledge Graphs", "Neo4j", "Backend Engineering", "Spring Boot", "Java", "Python", "AI Systems", "Data Structures & Algorithms"],
+    "sameAs": [
+      "https://github.com/sanjucoder-96",
+      "https://www.linkedin.com/in/sanjay-utchula-542a1131b/",
+      "https://leetcode.com/u/sanju_dev_09/",
+      "https://www.codechef.com/users/sanju_88",
+      "https://www.hackerrank.com/profile/sanjayutchula09"
+    ]
+  }
+  </script>
 </head>
 <body>
+
+  <!-- Keyboard users land here first — jumps past the fixed nav into content. -->
+  <a class="skip-link" href="#home">Skip to content</a>
 
   <!-- ─────────────── Icon sprite (inline SVG symbols) ─────────────── -->
   <svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg">
@@ -1293,12 +1356,22 @@
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
 
+  <!-- CDN fallback. motion.js already no-ops without GSAP, but the reveal
+       elements start at opacity:0 in CSS and would stay invisible if the CDN
+       is blocked/unreachable. Flag it so CSS can show them unconditionally. -->
+  <script>
+    if (!window.gsap) {
+      document.documentElement.classList.add('no-gsap');
+    }
+  </script>
+
   <script src="assets/js/constellation.js"></script>
   <script src="assets/js/graph-viz.js"></script>
   <script src="assets/js/dsa-canvas.js"></script>
   <script src="assets/js/pixel-viz.js"></script>
   <script src="assets/js/main.js"></script>
   <script src="assets/js/motion.js"></script>
+  <script src="assets/js/analytics.js"></script>
 
   <!-- Three.js is loaded as an ES module only for the hero particle core.
        If the CDN is unreachable the module simply never runs and the hero

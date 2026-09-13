@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Assets are fine to crawl; nothing private here.
+Sitemap: https://sanjayutchula.me/sitemap.xml

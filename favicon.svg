@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <!-- Sanjay Utchula — lemniscate monogram, matches the in-page nav mark -->
+  <rect width="40" height="40" rx="9" fill="#0A0A0B"/>
+  <path d="M9 20 C 9 13, 15 13, 20 20 C 25 27, 31 27, 31 20 C 31 13, 25 13, 20 20 C 15 27, 9 27, 9 20 Z"
+        fill="none" stroke="#5EC8C0" stroke-width="3.2" opacity=".18"/>
+  <path d="M9 20 C 9 13, 15 13, 20 20 C 25 27, 31 27, 31 20 C 31 13, 25 13, 20 20 C 15 27, 9 27, 9 20 Z"
+        fill="none" stroke="#EAF2F4" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

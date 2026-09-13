@@ -1996,3 +1996,48 @@ img.tech__mark {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   [data-reveal] { opacity: 1; transform: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   PRODUCTION HARDENING — skip link + graceful fallbacks
+   (appended; does not alter the existing design)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Skip link: off-screen until focused, then pinned top-left above the nav. */
+.skip-link {
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 10000;
+  transform: translateY(-120%);
+  margin: 0.5rem;
+  padding: 0.6rem 0.95rem;
+  border-radius: 8px;
+  background: var(--fg, #EAF2F4);
+  color: var(--bg, #0A0A0B);
+  font-family: var(--font-body, system-ui), sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  transition: transform 0.18s ease;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--accent-graph, #2E6E96);
+  outline-offset: 2px;
+}
+
+/* Universal focus-visible safety net. Interactive components define their own
+   richer focus states; this guarantees a visible ring on anything that slips
+   through (nav links, drawer links, brand, mail), for keyboard users only. */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-graph, #2E6E96);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* CDN fallback: if GSAP fails to load, its scroll reveals never run, so show
+   every reveal element unconditionally instead of leaving them at opacity:0. */
+.no-gsap [data-reveal] { opacity: 1 !important; transform: none !important; }

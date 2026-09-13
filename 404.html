@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>404 — Page not found · Sanjay Utchula</title>
+  <meta name="robots" content="noindex, follow" />
+  <meta name="theme-color" content="#0A0A0B" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      place-items: center;
+      background: radial-gradient(120% 120% at 50% 0%, #0d0f11 0%, #070809 70%);
+      color: #EAF2F4;
+      font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+      text-align: center;
+      padding: 2rem;
+    }
+    .wrap { max-width: 32rem; }
+    .mark { width: 68px; height: 68px; margin: 0 auto 1.75rem; display: block; }
+    .code {
+      font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+      letter-spacing: 0.35em;
+      font-size: 0.8rem;
+      color: #5EC8C0;
+      text-transform: uppercase;
+      margin: 0 0 0.9rem;
+    }
+    h1 { font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 600; margin: 0 0 0.6rem; letter-spacing: -0.02em; }
+    p { color: #AEBEC4; font-size: 1.02rem; line-height: 1.6; margin: 0 0 2rem; font-family: "Inter", system-ui, sans-serif; }
+    a.home {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.8rem 1.3rem; border-radius: 100px;
+      background: #EAF2F4; color: #0A0A0B; text-decoration: none; font-weight: 600;
+      transition: transform 0.25s ease, background 0.25s ease;
+    }
+    a.home:hover { transform: translateY(-2px); background: #5EC8C0; }
+    a.home:focus-visible { outline: 2px solid #5EC8C0; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+      <rect width="40" height="40" rx="9" fill="#0d0f11"/>
+      <path d="M9 20 C 9 13, 15 13, 20 20 C 25 27, 31 27, 31 20 C 31 13, 25 13, 20 20 C 15 27, 9 27, 9 20 Z"
+            fill="none" stroke="#5EC8C0" stroke-width="3.2" opacity=".2"/>
+      <path d="M9 20 C 9 13, 15 13, 20 20 C 25 27, 31 27, 31 20 C 31 13, 25 13, 20 20 C 15 27, 9 27, 9 20 Z"
+            fill="none" stroke="#EAF2F4" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <p class="code">Error 404</p>
+    <h1>Lost the thread.</h1>
+    <p>This node isn't in the graph. The page you're looking for doesn't exist or has moved.</p>
+    <a class="home" href="/">Back to home <span aria-hidden="true">→</span></a>
+  </main>
+</body>
+</html>
