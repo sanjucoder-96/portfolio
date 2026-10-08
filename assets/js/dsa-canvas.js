@@ -6,10 +6,10 @@
      window.__dsaHighlight(['ARR','STR'] | null)   rows → radar
      window.__dsaOnHover(name | null)              radar → rows (set by scenes.js)
 
-   Highlighting a topic that has one also plays its algorithm in the
-   middle of the radar — two pointers, BFS, a DP table, a sliding window,
-   4-queens backtracking, a mutex — so the hover shows the technique, not
-   just a brighter label.
+   Highlighting a topic also plays its algorithm in the middle of the
+   radar, so the hover shows the technique, not just a brighter label.
+   All twelve topics have one (see DEMOS); a row that covers two topics
+   alternates between their demos.
 
    Runs on FX.loop, so it stops drawing as soon as it leaves the screen. */
 (() => {
@@ -25,14 +25,14 @@
     { name: 'ARR',    angle: 0,              r: 0.85, kind: 'graph', demo: 'array' },
     { name: 'TREE',   angle: Math.PI * 0.16, r: 0.72, kind: 'warm',  demo: 'tree' },
     { name: 'DP',     angle: Math.PI * 0.32, r: 0.65, kind: 'agent', demo: 'dp' },
-    { name: 'GRPH',   angle: Math.PI * 0.48, r: 0.78, kind: 'graph', demo: 'tree' },
-    { name: 'STR',    angle: Math.PI * 0.64, r: 0.68, kind: 'graph', demo: 'array' },
-    { name: 'MATH',   angle: Math.PI * 0.80, r: 0.55, kind: 'warm' },
+    { name: 'GRPH',   angle: Math.PI * 0.48, r: 0.78, kind: 'graph', demo: 'graph' },
+    { name: 'STR',    angle: Math.PI * 0.64, r: 0.68, kind: 'graph', demo: 'string' },
+    { name: 'MATH',   angle: Math.PI * 0.80, r: 0.55, kind: 'warm',  demo: 'sieve' },
     { name: 'BT',     angle: Math.PI * 0.96, r: 0.58, kind: 'agent', demo: 'backtrack' },
     { name: 'SW',     angle: Math.PI * 1.12, r: 0.7,  kind: 'graph', demo: 'window' },
-    { name: 'HEAP',   angle: Math.PI * 1.28, r: 0.5,  kind: 'warm' },
-    { name: 'BIT',    angle: Math.PI * 1.44, r: 0.45, kind: 'graph' },
-    { name: 'GREEDY', angle: Math.PI * 1.60, r: 0.6,  kind: 'agent' },
+    { name: 'HEAP',   angle: Math.PI * 1.28, r: 0.5,  kind: 'warm',  demo: 'heap' },
+    { name: 'BIT',    angle: Math.PI * 1.44, r: 0.45, kind: 'graph', demo: 'bits' },
+    { name: 'GREEDY', angle: Math.PI * 1.60, r: 0.6,  kind: 'agent', demo: 'greedy' },
     { name: 'CONC',   angle: Math.PI * 1.76, r: 0.4,  kind: 'graph', demo: 'lock' },
   ];
   TOPICS.forEach((t) => { t.glow = 0; t.lx = 0; t.ly = 0; });
@@ -79,7 +79,227 @@
     return g;
   })();
 
+  // sieve of Eratosthenes over 2..31: every "p is prime" and every crossing-out, in order
+  const SIEVE_LO = 2, SIEVE_HI = 31;
+  const SIEVE_STEPS = (() => {
+    const steps = [], gone = new Set();
+    for (let p = SIEVE_LO; p * p <= SIEVE_HI; p++) {
+      if (gone.has(p)) continue;
+      steps.push({ prime: p });
+      for (let m = p * p; m <= SIEVE_HI; m += p) {
+        if (gone.has(m)) continue;
+        gone.add(m);
+        steps.push({ cross: m, by: p });
+      }
+    }
+    return steps;
+  })();
+
+  // min-heap insert: the array after each sift-up swap, and where the new key sits
+  const HEAP_STEPS = (() => {
+    const heap = [3, 8, 5, 12, 10, 9, 1];
+    const steps = [{ heap: heap.slice(), at: 6 }];
+    let i = 6;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (heap[parent] <= heap[i]) break;
+      [heap[parent], heap[i]] = [heap[i], heap[parent]];
+      i = parent;
+      steps.push({ heap: heap.slice(), at: i });
+    }
+    return steps;
+  })();
+
+  // Kernighan's popcount: n &= n - 1 clears the lowest set bit each round
+  const BIT_STEPS = (() => {
+    const steps = [];
+    for (let n = 0b10110100; ; n &= n - 1) {
+      steps.push(n);
+      if (n === 0) break;
+    }
+    return steps;
+  })();
+
+  // activity selection: intervals sorted by finish time, taken when they start after the last finish
+  const GREEDY = (() => {
+    const jobs = [[0, 3], [1, 4], [3, 5], [2, 6], [5, 8], [6, 9]];
+    let lastEnd = -Infinity;
+    return jobs.map(([a, b]) => {
+      const take = a >= lastEnd;
+      if (take) lastEnd = b;
+      return { a, b, take, lastEnd };
+    });
+  })();
+
+  const TREE_POS = [[0.5, 0.14], [0.26, 0.44], [0.74, 0.44], [0.12, 0.78], [0.4, 0.78], [0.6, 0.78], [0.88, 0.78]];
+  const TREE_EDGES = [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [2, 6]];
+
   const DEMOS = {
+    string: {
+      caption: 'palindrome · two pointers', still: 3,
+      draw(c, x, y, S, t, P) {
+        const word = 'RACECAR', n = word.length, mid = (n - 1) / 2;
+        const step = Math.min(Math.ceil(mid), Math.floor((t % 4.2) / 0.62));
+        const done = step >= mid;
+        const cell = S / n, cy = y + S * 0.5, side = cell - 5;
+        for (let k = 0; k < n; k++) {
+          const matched = k < step || k > n - 1 - step || (done && k === mid);
+          const current = k === step || k === n - 1 - step;
+          c.fillStyle = matched ? `rgba(${P.graph},0.85)` : current ? `rgba(${P.warm},0.9)` : `rgba(${P.fg},0.08)`;
+          c.fillRect(x + k * cell + 2.5, cy - side / 2, side, side);
+          c.font = mono(Math.max(10, cell * 0.42), 500); c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillStyle = matched || current ? (P.isLight ? '#fff' : '#041614') : `rgba(${P.fg},0.7)`;
+          c.fillText(word[k], x + k * cell + cell / 2, cy + 1);
+        }
+        c.font = mono(10, 500); c.textAlign = 'center';
+        c.fillStyle = `rgb(${done ? P.graph : P.warm})`;
+        c.fillText(done ? 'reads the same both ways  ✓'
+          : `'${word[step]}' == '${word[n - 1 - step]}'`, x + S / 2, y + S * 0.2);
+      },
+    },
+
+    graph: {
+      caption: 'DFS · go deep, then backtrack', still: 9,
+      draw(c, x, y, S, t, P) {
+        const pos = [[0.1, 0.5], [0.36, 0.2], [0.36, 0.8], [0.64, 0.3], [0.64, 0.74], [0.9, 0.5]].map(([px, py]) => [x + px * S, y + py * S]);
+        const edges = [[0, 1], [0, 2], [1, 2], [1, 3], [2, 4], [3, 4], [4, 5]];
+        // DFS from A, lowest neighbour first: A B C E D — D is a dead end — back to E, then F
+        const order = [0, 1, 2, 4, 3, 5];
+        const parent = { 1: 0, 2: 1, 4: 2, 3: 4, 5: 4 };
+        const treeEdge = (a, b, upTo) => order.slice(1, upTo + 1).some((v) => (parent[v] === a && v === b) || (parent[v] === b && v === a));
+        const idx = Math.min(order.length - 1, Math.floor((t % 5.2) / 0.6));
+        edges.forEach(([a, b]) => {
+          const on = treeEdge(a, b, idx);
+          c.strokeStyle = on ? `rgb(${P.graph})` : `rgba(${P.fg},0.16)`;
+          c.lineWidth = on ? 1.6 : 1;
+          c.beginPath(); c.moveTo(pos[a][0], pos[a][1]); c.lineTo(pos[b][0], pos[b][1]); c.stroke();
+        });
+        const r = Math.max(7, S * 0.055);
+        pos.forEach(([px, py], k) => {
+          const at = order.indexOf(k), visited = at < idx, current = at === idx;
+          c.fillStyle = visited ? `rgb(${P.graph})` : current ? `rgb(${P.warm})` : `rgb(${P.bg})`;
+          c.strokeStyle = visited || current ? 'transparent' : `rgba(${P.fg},0.35)`;
+          c.lineWidth = 1;
+          c.beginPath(); c.arc(px, py, current ? r * 1.25 : r, 0, Math.PI * 2); c.fill(); c.stroke();
+          c.font = mono(9, 500); c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillStyle = visited || current ? (P.isLight ? '#fff' : '#041614') : `rgba(${P.fg},0.6)`;
+          c.fillText('ABCDEF'[k], px, py + 0.5);
+        });
+      },
+    },
+
+    sieve: {
+      caption: 'sieve of Eratosthenes', still: 99,
+      draw(c, x, y, S, t, P) {
+        const beat = 0.13, n = SIEVE_STEPS.length;
+        const idx = Math.min(n, Math.floor((t % (n * beat + 2.4)) / beat));
+        const crossed = new Set(), primes = new Set();
+        let current = null, by = null;
+        for (let k = 0; k < idx; k++) {
+          const st = SIEVE_STEPS[k];
+          if (st.prime) { primes.add(st.prime); by = st.prime; } else { crossed.add(st.cross); current = st.cross; by = st.by; }
+        }
+        const finished = idx >= n;
+        const COLS = 6, cell = S / COLS, pad = 2.5;
+        for (let v = SIEVE_LO; v <= SIEVE_HI; v++) {
+          const k = v - SIEVE_LO, cx0 = x + (k % COLS) * cell, cy0 = y + Math.floor(k / COLS) * cell;
+          const isPrime = primes.has(v) || (finished && !crossed.has(v));
+          const isCurrent = !finished && v === current;
+          c.fillStyle = isCurrent ? `rgba(${P.java},0.75)` : isPrime ? `rgba(${P.warm},0.85)` : `rgba(${P.fg},${crossed.has(v) ? 0.03 : 0.09})`;
+          c.fillRect(cx0 + pad, cy0 + pad, cell - pad * 2, cell - pad * 2);
+          c.font = mono(Math.max(8, cell * 0.3), isPrime ? 500 : 400); c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillStyle = isPrime || isCurrent ? (P.isLight ? '#fff' : '#1a1206') : `rgba(${P.fg},${crossed.has(v) ? 0.22 : 0.8})`;
+          c.fillText(String(v), cx0 + cell / 2, cy0 + cell / 2 + 0.5);
+        }
+        c.font = mono(10, 500); c.textAlign = 'center';
+        c.fillStyle = `rgb(${P.warm})`;
+        c.fillText(finished ? 'what is left is prime' : `striking multiples of ${by}`, x + S / 2, y + S * 0.92);
+      },
+    },
+
+    heap: {
+      caption: 'min-heap · insert, sift up', still: 99,
+      draw(c, x, y, S, t, P) {
+        const beat = 0.95, n = HEAP_STEPS.length;
+        const idx = Math.min(n - 1, Math.floor((t % (n * beat + 1.6)) / beat));
+        const { heap, at } = HEAP_STEPS[idx];
+        const settled = idx === n - 1;
+        const pos = TREE_POS.map(([px, py]) => [x + px * S, y + py * S]);
+        TREE_EDGES.forEach(([a, b]) => {
+          const hot = !settled && b === at;
+          c.strokeStyle = hot ? `rgb(${P.warm})` : `rgba(${P.fg},0.2)`;
+          c.lineWidth = hot ? 1.6 : 1;
+          c.beginPath(); c.moveTo(pos[a][0], pos[a][1]); c.lineTo(pos[b][0], pos[b][1]); c.stroke();
+        });
+        const r = Math.max(9, S * 0.07);
+        pos.forEach(([px, py], k) => {
+          const isNew = k === at;
+          c.fillStyle = isNew ? `rgb(${settled ? P.graph : P.warm})` : `rgb(${P.bg})`;
+          c.strokeStyle = isNew ? 'transparent' : `rgba(${P.fg},0.4)`;
+          c.lineWidth = 1;
+          c.beginPath(); c.arc(px, py, isNew ? r * 1.15 : r, 0, Math.PI * 2); c.fill(); c.stroke();
+          c.font = mono(Math.max(9, r * 0.95), 500); c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillStyle = isNew ? (P.isLight ? '#fff' : '#041614') : `rgba(${P.fg},0.85)`;
+          c.fillText(String(heap[k]), px, py + 0.5);
+        });
+      },
+    },
+
+    bits: {
+      caption: 'n & (n − 1) · count set bits', still: 99,
+      draw(c, x, y, S, t, P) {
+        const beat = 0.85, n = BIT_STEPS.length;
+        const idx = Math.min(n - 1, Math.floor((t % (n * beat + 1.4)) / beat));
+        const value = BIT_STEPS[idx];
+        const clearing = idx < n - 1 ? value & -value : 0;       // the lowest set bit — next to go
+        const cell = S / 8, cy = y + S * 0.5, side = cell - 5;
+        for (let b = 7; b >= 0; b--) {
+          const k = 7 - b, bit = (value >> b) & 1, next = clearing === (1 << b);
+          c.fillStyle = next ? `rgba(${P.warm},0.9)` : bit ? `rgba(${P.graph},0.85)` : `rgba(${P.fg},0.07)`;
+          c.fillRect(x + k * cell + 2.5, cy - side / 2, side, side);
+          c.font = mono(Math.max(10, cell * 0.42), 500); c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillStyle = bit ? (P.isLight ? '#fff' : '#041614') : `rgba(${P.fg},0.45)`;
+          c.fillText(String(bit), x + k * cell + cell / 2, cy + 1);
+        }
+        c.font = mono(10, 500); c.textAlign = 'center';
+        c.fillStyle = `rgba(${P.fg},0.9)`;
+        c.fillText(`n = ${value}`, x + S * 0.3, y + S * 0.2);
+        c.fillStyle = `rgb(${P.warm})`;
+        c.fillText(`count = ${idx}`, x + S * 0.7, y + S * 0.2);
+      },
+    },
+
+    greedy: {
+      caption: 'interval scheduling · earliest finish', still: 99,
+      draw(c, x, y, S, t, P) {
+        const beat = 0.6, n = GREEDY.length, SPAN = 9;
+        const idx = Math.min(n, Math.floor((t % (n * beat + 2)) / beat));       // jobs decided so far
+        const rowH = (S * 0.84) / n, top = y + S * 0.04, sx = (v) => x + (v / SPAN) * S;
+        GREEDY.forEach((job, k) => {
+          const decided = k < idx, current = k === idx;
+          const rgb = !decided ? (current ? P.warm : P.fg) : job.take ? P.graph : P.java;
+          c.fillStyle = `rgba(${rgb},${decided ? (job.take ? 0.85 : 0.22) : current ? 0.7 : 0.12})`;
+          const by = top + k * rowH + rowH * 0.2, bh = rowH * 0.6;
+          c.beginPath();
+          if (c.roundRect) c.roundRect(sx(job.a), by, sx(job.b) - sx(job.a), bh, 3); else c.rect(sx(job.a), by, sx(job.b) - sx(job.a), bh);
+          c.fill();
+          if (decided && !job.take) {
+            c.strokeStyle = `rgba(${P.java},0.8)`; c.lineWidth = 1;
+            c.beginPath(); c.moveTo(sx(job.a) + 3, by + bh / 2); c.lineTo(sx(job.b) - 3, by + bh / 2); c.stroke();
+          }
+        });
+        const last = idx > 0 ? GREEDY[idx - 1].lastEnd : null;
+        if (last !== null) {
+          c.strokeStyle = `rgb(${P.warm})`; c.lineWidth = 1; c.setLineDash([3, 3]);
+          c.beginPath(); c.moveTo(sx(last), top); c.lineTo(sx(last), top + n * rowH); c.stroke();
+          c.setLineDash([]);
+        }
+        c.font = mono(10, 500); c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillStyle = `rgb(${P.graph})`;
+        c.fillText(`${GREEDY.slice(0, idx).filter((j) => j.take).length} taken`, x + S / 2, y + S * 0.95);
+      },
+    },
+
     array: {
       caption: 'two pointers · O(n)', still: 2.6,
       draw(c, x, y, S, t, P) {
@@ -105,11 +325,10 @@
     tree: {
       caption: 'BFS · level order', still: 3.2,
       draw(c, x, y, S, t, P) {
-        const pos = [[0.5, 0.14], [0.26, 0.44], [0.74, 0.44], [0.12, 0.78], [0.4, 0.78], [0.6, 0.78], [0.88, 0.78]]
-          .map(([px, py]) => [x + px * S, y + py * S]);
+        const pos = TREE_POS.map(([px, py]) => [x + px * S, y + py * S]);
         const idx = Math.min(pos.length, Math.floor((t % 5) / 0.5));
         c.lineWidth = 1;
-        [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [2, 6]].forEach(([a, b]) => {
+        TREE_EDGES.forEach(([a, b]) => {
           c.strokeStyle = b < idx ? `rgba(${P.graph},0.7)` : `rgba(${P.fg},0.16)`;
           c.beginPath(); c.moveTo(pos[a][0], pos[a][1]); c.lineTo(pos[b][0], pos[b][1]); c.stroke();
         });
@@ -238,6 +457,8 @@
     },
   };
   const demo = { key: null, t0: 0, fade: 0 };
+  const TURN = 6000;       // ms each demo holds the stage when a highlight covers two topics
+  let activeKey = '', activeSince = 0, pinnedTopic = null;
   const STAGE = 0.82;      // radius (× R) of the disc a demo clears for itself
 
   function seed() {
@@ -267,9 +488,12 @@
     const R = Math.min(W, H) * 0.42;
     const active = hovered ? [hovered] : external;
 
-    // which algorithm (if any) the highlighted topic plays
-    const lead = active && byName.get(active[0]);
-    const want = lead && lead.demo ? lead.demo : null;
+    // which algorithm the highlight plays; two topics take turns
+    const key = active ? active.join() : '';
+    if (key !== activeKey) { activeKey = key; activeSince = now; }
+    const leads = active ? active.map((n) => byName.get(n)).filter((t) => t && t.demo) : [];
+    const lead = leads.length ? leads[Math.floor((now - activeSince) / TURN) % leads.length] : null;
+    const want = lead ? lead.demo : null;
     if (want && want !== demo.key) { demo.key = want; demo.t0 = now; }
     demo.fade = FX.reduced ? (want ? 1 : 0) : FX.lerp(demo.fade, want ? 1 : 0, 0.12);
     if (!want && demo.fade < 0.02) { demo.key = null; demo.fade = 0; }
@@ -369,6 +593,11 @@
       ctx.fillText('600+', cx, cy + 10);
       ctx.globalAlpha = 1;
     }
+    if (!active && !FX.reduced) {
+      ctx.font = mono(9); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = `rgba(${P.fg},${P.isLight ? 0.55 : 0.38})`;
+      ctx.fillText(FX.hoverable ? 'hover any topic to run it' : 'tap any topic to run it', cx, cy + R * 0.99 + 12);
+    }
     if (stage > 0) {
       const d = DEMOS[demo.key];
       const S = R * 1.02;
@@ -396,6 +625,18 @@
     if (FX.reduced) draw(0);
   };
   canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;              // touch pins with a tap instead
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const best = nearestTopic(e);
+    // while a demo is on stage, staying over it keeps it there
+    if (!best && hovered && demo.key && Math.hypot(x - W / 2, y - H / 2) < Math.min(W, H) * 0.42 * STAGE) return;
+    setHover(best);
+  }, { passive: true });
+  canvas.addEventListener('pointerleave', () => setHover(null));
+
+  // click / tap pins a topic so its demo keeps playing (the only route on touch)
+  const nearestTopic = (e) => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     let best = null, bestD = 46 * 46;
@@ -403,11 +644,15 @@
       const d = (t.lx - x) * (t.lx - x) + (t.ly - y) * (t.ly - y);
       if (d < bestD) { bestD = d; best = t.name; }
     });
-    // while a demo is on stage, staying over it keeps it there
-    if (!best && hovered && demo.key && Math.hypot(x - W / 2, y - H / 2) < Math.min(W, H) * 0.42 * STAGE) return;
-    setHover(best);
-  }, { passive: true });
-  canvas.addEventListener('pointerleave', () => setHover(null));
+    return best;
+  };
+  canvas.addEventListener('click', (e) => {
+    const name = nearestTopic(e);
+    pinnedTopic = name && name !== pinnedTopic ? name : null;
+    external = pinnedTopic ? [pinnedTopic] : null;
+    if (window.__dsaOnHover) window.__dsaOnHover(pinnedTopic);
+    if (FX.reduced) draw(0);
+  });
 
   window.addEventListener('themechange', () => { if (FX.reduced) requestAnimationFrame(() => draw(0)); });
   if (!FX.reduced) FX.loop(canvas, draw);
