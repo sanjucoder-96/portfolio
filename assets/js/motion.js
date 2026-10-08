@@ -40,6 +40,9 @@ window.addEventListener('unhandledrejection', (e) => {
 
   gsap.registerPlugin(ScrollTrigger);
   gsap.config({ nullTargetWarn: false });
+  // The CSS reduced-motion rule cannot reach GSAP tweens — collapse them here,
+  // so reveals still resolve to their end state but nothing travels.
+  if (reduced) gsap.globalTimeline.timeScale(40);
 
   // Guard against a rare GSAP internal refresh cascade
   // (specific DOM configurations trigger "reading 'end' of undefined" inside ScrollTrigger).
@@ -412,14 +415,14 @@ window.addEventListener('unhandledrejection', (e) => {
       const lines = c.querySelectorAll('.terminal__body');
       const cards = c.querySelectorAll('.soc-card');
       gsap.set(cards, { opacity: 0, y: 20 });
-      tl.to(cards, { opacity: 1, y: 0, duration: 0.6, stagger: 0.09, ease: 'expo.out' }, 1.0);
+      tl.to(cards, { opacity: 1, y: 0, duration: 0.6, stagger: 0.09, ease: 'expo.out', clearProps: 'transform' }, 1.0);
     }
     if (c.classList.contains('case--graphgst')) {
       const blocks = c.querySelectorAll('.narrative__block');
       gsap.set(blocks, { opacity: 0, y: 16 });
       tl.to(blocks, { opacity: 1, y: 0, duration: 0.55, stagger: 0.1, ease: 'expo.out' }, 1.0);
     }
-    if (c.classList.contains('case--java')) {
+    if (c.classList.contains('case--veri') || c.classList.contains('case--bids')) {
       const blocks = c.querySelectorAll('.narrative__block');
       gsap.set(blocks, { opacity: 0, y: 16 });
       tl.to(blocks, { opacity: 1, y: 0, duration: 0.55, stagger: 0.1, ease: 'expo.out' }, 1.0);
@@ -433,16 +436,6 @@ window.addEventListener('unhandledrejection', (e) => {
       tl.to(blocks, { opacity: 1, y: 0, duration: 0.55, stagger: 0.1, ease: 'expo.out' }, 1.0)
         .to(flowNodes, { opacity: 1, y: 0, duration: 0.5, stagger: 0.15, ease: 'expo.out' }, 1.4)
         .to(flowArrows, { opacity: 1, y: 0, duration: 0.4, stagger: 0.15, ease: 'expo.out' }, 1.55);
-    }
-    if (c.classList.contains('case--pixel')) {
-      const blocks = c.querySelectorAll('.narrative__block');
-      const grid = c.querySelectorAll('.pixel-viz__cell');
-      gsap.set(blocks, { opacity: 0, y: 16 });
-      tl.to(blocks, { opacity: 1, y: 0, duration: 0.55, stagger: 0.1, ease: 'expo.out' }, 1.0);
-      if (grid.length) {
-        gsap.set(grid, { opacity: 0, scale: 0.8 });
-        tl.to(grid, { opacity: 1, scale: 1, duration: 0.5, stagger: 0.012, ease: 'expo.out' }, 1.1);
-      }
     }
   } catch (e) { console.warn('case ST failed', c?.dataset?.case, e.message); } });
 
@@ -458,36 +451,24 @@ window.addEventListener('unhandledrejection', (e) => {
   }
 
   // Contact rows + mail
-  gsap.set('.contact__eyebrow, .mail, .contact__row', { opacity: 0, y: 16 });
+  gsap.set('.contact__eyebrow, .mail, .copy-btn, .contact__facts li', { opacity: 0, y: 16 });
+  gsap.set('.composer', { opacity: 0, y: 28 });
   safeST({
     trigger: '.contact', start: 'top 70%', once: true,
     onEnter: () => {
       gsap.to('.contact__eyebrow', { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out' });
-      gsap.to('.mail', { opacity: 1, y: 0, duration: 0.8, ease: 'expo.out', delay: 0.25 });
-      gsap.to('.contact__row', { opacity: 1, y: 0, duration: 0.6, stagger: 0.07, ease: 'expo.out', delay: 0.4 });
+      // .mail is magnetic (main.js writes its transform), so hand the property back
+      gsap.to('.mail, .copy-btn', { opacity: 1, y: 0, duration: 0.8, ease: 'expo.out', delay: 0.25, stagger: 0.08, clearProps: 'transform' });
+      gsap.to('.contact__facts li', { opacity: 1, y: 0, duration: 0.6, stagger: 0.07, ease: 'expo.out', delay: 0.45 });
+      gsap.to('.composer', { opacity: 1, y: 0, duration: 1.0, ease: 'expo.out', delay: 0.3, clearProps: 'transform' });
     },
   });
 
   // ──────────────────────────────────────────────
   //  7. Stack, timeline, journey, DSA
   // ──────────────────────────────────────────────
-  gsap.set('.stack__group', { opacity: 0, y: 18 });
-  safeST({
-    trigger: '.stack__grid', start: 'top 80%', once: true,
-    onEnter: () => gsap.to('.stack__group', { opacity: 1, y: 0, duration: 0.6, ease: 'expo.out', stagger: 0.06 }),
-  });
-
-  gsap.set('.tl__item', { opacity: 0, y: 26 });
-  safeST({
-    trigger: '.tl', start: 'top 80%', once: true,
-    onEnter: () => gsap.to('.tl__item', { opacity: 1, y: 0, duration: 0.9, ease: 'expo.out', stagger: 0.12 }),
-  });
-
-  gsap.set('.journey__card', { opacity: 0, y: 20 });
-  safeST({
-    trigger: '.journey__grid', start: 'top 80%', once: true,
-    onEnter: () => gsap.to('.journey__card', { opacity: 1, y: 0, duration: 0.75, ease: 'expo.out', stagger: 0.1 }),
-  });
+  // Stack, experience and journey reveal themselves (ecosystem.js / scenes.js +
+  // interactions.css) — their entrances are tied to scroll position, not a one-shot.
 
   // DSA — coordinated: number, viz, bars
   gsap.set('.dsa__lead, .dsa__viz, .dsa__topics li', { opacity: 0, y: 20 });
@@ -565,10 +546,15 @@ window.addEventListener('unhandledrejection', (e) => {
       // clamp velocity → tiny translate on decorative mono elements
       targetSkew = Math.max(-8, Math.min(8, velocity * 0.4));
     });
+    let writtenSkew = 0;
     gsap.ticker.add(() => {
       currentSkew += (targetSkew - currentSkew) * 0.12;
       targetSkew *= 0.92; // decay so it settles after scroll stops
-      els.forEach((el) => { el.style.transform = `translateY(${currentSkew}px)`; });
+      // At rest this used to rewrite a dozen transforms every frame, forever.
+      const next = Math.abs(currentSkew) < 0.02 ? 0 : Math.round(currentSkew * 50) / 50;
+      if (next === writtenSkew) return;
+      writtenSkew = next;
+      els.forEach((el) => { el.style.transform = next ? `translateY(${next}px)` : ''; });
     });
   }
 
@@ -586,13 +572,16 @@ window.addEventListener('unhandledrejection', (e) => {
 
       let mx = -100, my = -100, rx = -100, ry = -100;
       window.addEventListener('mousemove', (e) => { mx = e.clientX; my = e.clientY; });
+      [dot, ring, label].forEach((el) => { el.style.left = '-100px'; el.style.top = '-100px'; });   // parked until the first move
       function loop() {
+        requestAnimationFrame(loop);
+        // nothing to write once the ring has caught up with a still pointer
+        if (Math.abs(mx - rx) < 0.05 && Math.abs(my - ry) < 0.05) return;
         rx += (mx - rx) * 0.18;
         ry += (my - ry) * 0.18;
         dot.style.left   = mx + 'px'; dot.style.top   = my + 'px';
         ring.style.left  = rx + 'px'; ring.style.top  = ry + 'px';
         label.style.left = rx + 'px'; label.style.top = ry + 'px';
-        requestAnimationFrame(loop);
       }
       loop();
 
@@ -601,7 +590,7 @@ window.addEventListener('unhandledrejection', (e) => {
         external: '↗',
         mail: 'write',
       };
-      const hoverSelector = 'a, button, .magnetic, .flow__node, .soc-card, .journey__card, .metric, .stack__list li, .tech, .social';
+      const hoverSelector = 'a, button, label, input, textarea, .magnetic, .flow__node, .soc-card, .journey__card, .metric, .tech, .social, .dsa__topics li, .pixel-viz__cell';
 
       // Event delegation so attributes set post-init still work
       document.addEventListener('mouseover', (e) => {
@@ -666,32 +655,10 @@ window.addEventListener('unhandledrejection', (e) => {
     });
   }
 
-  // ──────────────────────────────────────────────
-  //  Tech → project linking
-  //  Hovering a .tech with data-project="graph,agent" highlights those cases.
-  // ──────────────────────────────────────────────
-  const cases = new Map();
-  document.querySelectorAll('.case[data-case], .mini-case[data-case]').forEach((c) => {
-    cases.set(c.dataset.case, c);
-  });
-  document.querySelectorAll('.tech').forEach((tech) => {
-    const targets = (tech.dataset.project || '').split(',').map(s => s.trim()).filter(Boolean);
-    if (!targets.length) return;
-    const linked = targets.map(k => cases.get(k)).filter(Boolean);
-    const activate = () => linked.forEach(c => c.classList.add('is-linked'));
-    const deactivate = () => linked.forEach(c => c.classList.remove('is-linked'));
-    tech.addEventListener('mouseenter', activate);
-    tech.addEventListener('mouseleave', deactivate);
-    tech.addEventListener('focus', activate);
-    tech.addEventListener('blur', deactivate);
-    tech.addEventListener('touchstart', () => {
-      activate();
-      setTimeout(deactivate, 1600);
-    }, { passive: true });
-  });
+  // Tech ↔ project tracing lives in ecosystem.js (the old hover highlighted
+  // case titles that were several screens away).
 
-  // Cursor label variant for tech tiles + socials
-  document.querySelectorAll('.tech').forEach(el => el.setAttribute('data-cursor', 'explore'));
+  // Cursor label variant for socials
   document.querySelectorAll('.social').forEach(el => {
     if (!el.hasAttribute('data-cursor')) el.setAttribute('data-cursor', 'external');
   });

@@ -153,6 +153,10 @@
       this.lastCometAt = 0;
       this.destroyed = false;
       this.raf = 0;
+      /* Optional: () => [{ x, y, act }] in client coords. The hero reads the
+         3D rig's nodes from window.__coreAnchors; other sections can hand
+         the field their own points to converge on (see scenes.js → contact). */
+      this.anchors = null;
 
       if (this.p.canvasOpacity !== null) canvas.style.opacity = this.p.canvasOpacity;
 
@@ -324,10 +328,22 @@
          visual. Dark mode is unaffected — the atmosphere stays there. */
       if (palette.isLight) return;
 
+      /* Tall fields (contact + footer is ~2.5 screens) only work on the band
+         that is actually on screen. Stars outside it rest at their anchors,
+         so nothing pops when they scroll back in. */
+      let bandTop = -Infinity, bandBottom = Infinity;
+      if (this.H > window.innerHeight * 1.25) {
+        const top = -this.canvas.getBoundingClientRect().top;
+        bandTop = top - 180;
+        bandBottom = top + window.innerHeight + 180;
+      }
+      const offBand = (s) => s.anchorY < bandTop || s.anchorY > bandBottom;
+
       // ── Physics ──
       const { springK, damping, cursorRadius, cursorForce } = this.p;
       for (let i = 0; i < this.stars.length; i++) {
         const s = this.stars[i];
+        if (offBand(s)) { s.x = s.anchorX; s.y = s.anchorY; s.vx = 0; s.vy = 0; continue; }
         const targetX = s.anchorX + Math.sin(now * s.driftFreqX + s.driftPhaseX) * s.driftAmpX;
         const targetY = s.anchorY + Math.sin(now * s.driftFreqY + s.driftPhaseY) * s.driftAmpY;
 
@@ -360,6 +376,7 @@
       const grid = this.buildGrid();
       for (let i = 0; i < this.revealed; i++) {
         const a = this.stars[i];
+        if (offBand(a)) continue;
         const cx = Math.min(grid.cols - 1, Math.max(0, (a.x / grid.cell) | 0));
         const cy = Math.min(grid.rows - 1, Math.max(0, (a.y / grid.cell) | 0));
         for (let gy = cy - 1; gy <= cy + 1; gy++) {
@@ -398,9 +415,9 @@
          computational model. An anchor's `act` (its live activation)
          brightens its links, which is how a graph pulse inside the cube
          visibly spills out into the surrounding constellation. */
-      if (this.p.coreLink && window.__coreAnchors && window.__coreAnchors.length) {
+      const anchors = this.p.coreLink ? window.__coreAnchors : (this.anchors ? this.anchors() : null);
+      if (anchors && anchors.length) {
         const rect = this.canvas.getBoundingClientRect();
-        const anchors = window.__coreAnchors;
         const REACH = 260;                     // longer, so convergence reads
         ctx.lineWidth = 0.6;
         for (let ai = 0; ai < anchors.length; ai++) {
@@ -411,7 +428,7 @@
           const pulse = a.act || 0;
           for (let i = 0; i < this.revealed; i++) {
             const s = this.stars[i];
-            if (s.tier === 'back') continue;
+            if (s.tier === 'back' || offBand(s)) continue;
             const dx = s.x - ax, dy = s.y - ay;
             const d2 = dx * dx + dy * dy;
             if (d2 >= REACH * REACH) continue;
@@ -439,6 +456,7 @@
       if (this.active && this.revealed > 0) {
         for (let i = 0; i < this.revealed; i++) {
           const s = this.stars[i];
+          if (offBand(s)) continue;
           const dx = this.mx - s.x, dy = this.my - s.y;
           const d = Math.hypot(dx, dy);
           if (d < this.p.cursorRadius) {
@@ -456,6 +474,7 @@
       // ── Stars ──
       for (let i = 0; i < this.revealed; i++) {
         const s = this.stars[i];
+        if (offBand(s)) continue;
         const nodeAge = this.bootDur > 0
           ? Math.min(1, ((now - this.bootStart) / this.bootDur) * this.N - i) * 1.6
           : 1;
