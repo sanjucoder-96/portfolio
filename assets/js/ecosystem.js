@@ -5,11 +5,13 @@
    and its neighbourhood lights up across clusters; pick a system and the
    whole stack behind that project is traced to a hub.
 
-   One DOM, two layouts:
-     graph  wide screens with a fine pointer — nodes sit on per-cluster
-            orbits, edges are drawn on a canvas beneath them
-     grid   everything else — the grouped tiles, with the same tracing
-            behaviour and a readout that rides the bottom of the viewport
+   One DOM, one graph, three arrangements of it:
+     wide     ≥1200px — clusters spread across the stage, readout top-right
+     compact  <1200px — clusters in rows of three, two or (on phones) one,
+              stacked down the page
+   In the compact arrangements the readout rides the bottom of the viewport
+   while a trace is active, and nodes hold still (no pointer to react to).
+   The grouped grid in the markup is what shows if this script never runs.
 
    Nodes stay real <button>s in both, so keyboard and screen-reader access
    never depends on the canvas. */
@@ -87,6 +89,16 @@
     { x: 0.888, y: 0.760, rx: 92,  ry: 88 },    // graph & data (5)
     { x: 0.102, y: 0.775, rx: 88,  ry: 84 },    // frontend (4)
     { x: 0.500, y: 0.775, rx: 262, ry: 100 },   // tools & core cs (11)
+  ];
+
+  // Compact arrangements: one orbit per cluster, laid out in rows by layout().
+  const COMPACT_ORBITS = [
+    { rx: 120, ry: 104 },   // languages (8)
+    { rx: 120, ry: 104 },   // backend (8)
+    { rx: 104, ry: 90 },    // ai · ml (5)
+    { rx: 104, ry: 90 },    // graph & data (5)
+    { rx: 92,  ry: 80 },    // frontend (4)
+    { rx: 122, ry: 184 },   // tools & core cs (11) — tall, so eleven nodes fit a phone's width
   ];
 
   const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -189,6 +201,11 @@
       render();
     });
   });
+  stage.addEventListener('click', (e) => {
+    if (!pin || e.target.closest('.tech, .eco__readout')) return;
+    pin = null; hover = null;
+    render();
+  });
   // Hover is sticky inside the stage so the readout's links stay reachable.
   stage.addEventListener('pointerleave', () => { hover = null; render(); });
   chips.forEach((c) => {
@@ -236,36 +253,69 @@
     return out;
   }
 
-  function layout() {
-    const wantGraph = FX.hoverable && window.innerWidth >= 1200;
-    if (wantGraph !== graph) {
-      graph = wantGraph;
-      eco.classList.toggle('eco--graph', graph);
-      if (!graph) nodes.forEach((n) => { n.el.style.transform = ''; });
-    }
-    if (!graph) return;
+  let compact = false;      // stacked arrangement (phones, tablets)
+  let tick = 0;
 
-    W = stage.clientWidth;
-    k = FX.clamp(W / 1300, 0.86, 1.12);
-    H = Math.round(800 * k);
-    stage.style.setProperty('--eco-h', H + 'px');
-    groups.forEach((g, gi) => {
-      const o = ORBITS[gi] || ORBITS[ORBITS.length - 1];
-      g.cx = o.x * W; g.cy = o.y * H; g.rx = o.rx * k; g.ry = o.ry * k;
-      g.head.style.setProperty('--x', g.cx.toFixed(1) + 'px');
-      g.head.style.setProperty('--y', g.cy.toFixed(1) + 'px');
-      ellipsePoints(g.cx, g.cy, g.rx, g.ry, g.nodes.length).forEach((p, i) => {
-        const n = g.nodes[i];
-        n.hx = p[0]; n.hy = p[1];
-        if (!entered) { n.x = W / 2; n.y = H / 2; }
-      });
+  function setCluster(g, cx, cy, rx, ry) {
+    g.cx = cx; g.cy = cy; g.rx = rx; g.ry = ry;
+    g.head.style.setProperty('--x', cx.toFixed(1) + 'px');
+    g.head.style.setProperty('--y', cy.toFixed(1) + 'px');
+    ellipsePoints(cx, cy, rx, ry, g.nodes.length).forEach((p, i) => {
+      const n = g.nodes[i];
+      n.hx = p[0]; n.hy = p[1];
+      if (!entered) { n.x = compact ? cx : W / 2; n.y = compact ? cy : H / 2; }
     });
+  }
+
+  function layout() {
+    if (!graph) { graph = true; eco.classList.add('eco--graph'); }
+    W = stage.clientWidth;
+    if (!W) return;
+    const wasCompact = compact;
+    compact = window.innerWidth < 1200;
+    eco.classList.toggle('eco--compact', compact);
+    if (compact !== wasCompact) nodes.forEach((n) => { n.written = ''; });
+
+    if (!compact) {
+      k = FX.clamp(W / 1300, 0.86, 1.12);
+      H = Math.round(800 * k);
+      groups.forEach((g, gi) => {
+        const o = ORBITS[gi] || ORBITS[ORBITS.length - 1];
+        setCluster(g, o.x * W, o.y * H, o.rx * k, o.ry * k);
+      });
+    } else {
+      // rows of one or two clusters; each orbit is scaled to fit its column
+      const cols = W >= 990 ? 3 : W >= 660 ? 2 : 1;
+      const colW = W / cols;
+      const NODE = 76, PAD_TOP = 34, PAD_BOTTOM = 58, GAP = 26;     // node footprint + label room
+      let y = 8;
+      for (let i = 0; i < groups.length; i += cols) {
+        const row = groups.slice(i, i + cols).map((g, c) => {
+          const o = COMPACT_ORBITS[i + c] || COMPACT_ORBITS[0];
+          const fit = Math.min(1, (colW - NODE) / (o.rx * 2));
+          return { g, c, rx: o.rx * fit, ry: o.ry * fit };
+        });
+        const tall = Math.max(...row.map((r) => r.ry));
+        row.forEach((r) => {
+          // a lone cluster in a single column leans left/right alternately, so the column reads as a path
+          const slack = colW - NODE - r.rx * 2;
+          const lean = cols === 1 ? (i % 2 ? 1 : -1) * Math.min(18, slack / 2) : 0;
+          setCluster(r.g, colW * (r.c + 0.5) + lean, y + PAD_TOP + tall, r.rx, r.ry);
+        });
+        y += PAD_TOP + tall * 2 + PAD_BOTTOM + GAP;
+      }
+      H = Math.round(y - GAP + 8);
+    }
+    stage.style.setProperty('--eco-h', H + 'px');
     if (FX.reduced) { nodes.forEach((n) => place(n, n.hx, n.hy, 1)); draw(0); }
   }
 
   function place(n, x, y, s) {
     n.x = x; n.y = y; n.s = s;
-    n.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${s.toFixed(3)})`;
+    const css = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${s.toFixed(3)})`;
+    if (css === n.written) return;          // settled nodes cost nothing
+    n.written = css;
+    n.el.style.transform = css;
   }
 
   function frame(now) {
@@ -274,22 +324,30 @@
     const intro = entered ? (now - introAt) / 1000 : 0;
     nodes.forEach((n, i) => {
       const born = entered ? FX.easeOut(FX.clamp((intro - i * 0.022) / 1.1)) : 0;
-      let tx = n.hx + Math.sin(t * 0.42 + n.phase) * 4;
-      let ty = n.hy + Math.cos(t * 0.37 + n.phase * 1.7) * 4;
+      let tx = n.hx, ty = n.hy;
       let ts = n.on ? 1.14 : n.isRel ? 1.05 : 1;
 
-      const dx = mx - tx, dy = my - ty, d = Math.hypot(dx, dy);
-      if (d < 150 && d > 0.5) {
-        const f = (1 - d / 150);
-        tx += (dx / d) * f * f * 8;
-        ty += (dy / d) * f * f * 8;
-        ts += f * 0.1;
+      if (!compact) {
+        // drift, and lean toward a nearby pointer
+        tx += Math.sin(t * 0.42 + n.phase) * 4;
+        ty += Math.cos(t * 0.37 + n.phase * 1.7) * 4;
+        const dx = mx - tx, dy = my - ty, d = Math.hypot(dx, dy);
+        if (d < 150 && d > 0.5) {
+          const f = (1 - d / 150);
+          tx += (dx / d) * f * f * 8;
+          ty += (dy / d) * f * f * 8;
+          ts += f * 0.1;
+        }
       }
-      tx = FX.lerp(W / 2, tx, born);
-      ty = FX.lerp(H / 2, ty, born);
+      // entrance: from the stage centre when wide, from each cluster's own centre when stacked
+      tx = FX.lerp(compact ? n.g.cx : W / 2, tx, born);
+      ty = FX.lerp(compact ? n.g.cy : H / 2, ty, born);
       ts *= 0.4 + born * 0.6;
-      place(n, FX.lerp(n.x, tx, 0.16), FX.lerp(n.y, ty, 0.16), FX.lerp(n.s, ts, 0.16));
+      const settle = (a, b) => (Math.abs(a - b) < 0.05 ? b : FX.lerp(a, b, 0.16));
+      place(n, settle(n.x, tx), settle(n.y, ty), Math.abs(n.s - ts) < 0.002 ? ts : FX.lerp(n.s, ts, 0.16));
     });
+    // the stacked stage is several screens tall — repaint it at half rate once the entrance is over
+    if (compact && intro > 2.4 && (tick++ & 1)) return;
     draw(now);
   }
 
@@ -317,7 +375,8 @@
     edges.forEach((e) => {
       const hot = t && t.node && (e.a === t.node || e.b === t.node);
       if (hot) return;
-      ctx.strokeStyle = `rgba(${P.edge},${((t ? 0.03 : (P.isLight ? 0.13 : 0.075)) * fade).toFixed(3)})`;
+      const rest = (P.isLight ? 0.13 : 0.075) * (compact && e.a.g !== e.b.g ? 0.45 : 1);
+      ctx.strokeStyle = `rgba(${P.edge},${((t ? 0.03 : rest) * fade).toFixed(3)})`;
       ctx.lineWidth = 0.7;
       ctx.beginPath(); ctx.moveTo(e.a.x, e.a.y); ctx.lineTo(e.b.x, e.b.y); ctx.stroke();
     });
