@@ -82,7 +82,12 @@
   let dragging = false, lastX = 0, lastY = 0;
   let visible = true;
   let traceT = -1;                   // -1 = idle, 0..1 = cycle drawing progress
+  let hoverIdx = -1;                 // node under the pointer (-1 = none)
+  let lastP = [];                    // last frame's projections, for hit-testing
   const FOV = 3.2;
+
+  // Neighbour lookup so a hovered entity can light its own edges
+  const neighbours = nodes.map(() => new Set());
 
   function resize() {
     const r = canvas.getBoundingClientRect();
@@ -125,7 +130,18 @@
     canvas.parentElement?.classList.add('is-grabbed');
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
+    if (!dragging) {
+      // inspect: nearest projected node within reach of the pointer
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      let best = -1, bestD = 22 * 22;
+      for (let i = 0; i < lastP.length; i++) {
+        const dx = lastP[i].sx - x, dy = lastP[i].sy - y, d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      hoverIdx = best;
+      return;
+    }
     const dx = e.clientX - lastX, dy = e.clientY - lastY;
     lastX = e.clientX; lastY = e.clientY;
     rotY += dx * 0.008;
@@ -135,6 +151,7 @@
     velX = dy * 0.0008;
   });
   const endDrag = () => { dragging = false; canvas.style.cursor = 'grab'; };
+  canvas.addEventListener('pointerleave', () => { hoverIdx = -1; });
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.style.cursor = 'grab';
@@ -150,8 +167,8 @@
     if (!visible) return;
 
     if (!dragging) {
-      // ease velocity back toward the idle orbit rate
-      velY += (0.0016 - velY) * 0.02;
+      // ease velocity back toward the idle orbit rate (held still while inspecting a node)
+      velY += ((hoverIdx >= 0 ? 0 : 0.0016) - velY) * (hoverIdx >= 0 ? 0.12 : 0.02);
       velX += (0 - velX) * 0.04;
       rotY += velY;
       rotX += velX;
@@ -163,6 +180,8 @@
 
     // Project everything once
     const P = nodes.map(project);
+    lastP = P;
+    const hov = dragging ? -1 : hoverIdx;
 
     // ── Edges, sorted far → near ──
     const edgeList = edges.map(([a, b]) => ({
@@ -173,9 +192,10 @@
     edgeList.forEach((e) => {
       const A = P[e.a], B = P[e.b];
       const near = 1 - (A.depth + B.depth) / 2;      // 1 = closest
-      const alpha = 0.05 + near * 0.16;
-      ctx.strokeStyle = `rgba(${pal.edge},${alpha.toFixed(3)})`;
-      ctx.lineWidth = 0.4 + near * 0.7;
+      const lit = hov >= 0 && (e.a === hov || e.b === hov);
+      const alpha = lit ? 0.75 : (0.05 + near * 0.16) * (hov >= 0 ? 0.45 : 1);
+      ctx.strokeStyle = `rgba(${lit ? pal.warm : pal.edge},${alpha.toFixed(3)})`;
+      ctx.lineWidth = lit ? 1.4 : 0.4 + near * 0.7;
       ctx.beginPath();
       ctx.moveTo(A.sx, A.sy);
       ctx.lineTo(B.sx, B.sy);
@@ -212,11 +232,13 @@
       const n = nodes[i], p = P[i];
       const near = 1 - p.depth;                        // 1 = closest to camera
       const isHot = traceT >= 0 && cycleSet.has(i);
+      const isHov = i === hov;
+      const isNbr = hov >= 0 && neighbours[hov].has(i);
       const base = (n.core ? 4.2 : 2.6) * p.scale;
       const twinkle = 0.85 + Math.sin(now * 0.0011 + n.pulse) * 0.15;
-      const r = base * (isHot ? 1.5 : 1);
-      const rgb = isHot ? pal.graph : (n.core ? pal.graph : pal.fg);
-      const alpha = (0.2 + near * 0.75) * twinkle * (isHot ? 1 : 0.9);
+      const r = base * (isHov ? 1.9 : isHot ? 1.5 : isNbr ? 1.25 : 1);
+      const rgb = isHov || isNbr ? pal.warm : isHot ? pal.graph : (n.core ? pal.graph : pal.fg);
+      const alpha = isHov || isNbr ? 1 : (0.2 + near * 0.75) * twinkle * (isHot ? 1 : 0.9) * (hov >= 0 ? 0.6 : 1);
 
       // Volumetric halo — stronger the nearer the node is
       const glowR = r * (isHot ? 7 : n.core ? 5 : 3.4);
@@ -241,6 +263,14 @@
       ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
       ctx.fill();
 
+      // The inspected entity always names itself, with its degree
+      if (isHov) {
+        ctx.font = '500 10.5px "JetBrains Mono", ui-monospace, monospace';
+        ctx.fillStyle = `rgb(${pal.warm})`;
+        ctx.textAlign = 'left';
+        ctx.fillText(`${n.id} · ${neighbours[i].size} edges`, p.sx + r * 2.6, p.sy - r * 1.6);
+        return;
+      }
       // Labels only on near-side nodes, so the back of the sphere stays clean
       if (near > 0.55 && (n.core || i % 2 === 0)) {
         ctx.font = `${(8.5 * p.scale).toFixed(1)}px "JetBrains Mono", ui-monospace, monospace`;
@@ -263,6 +293,11 @@
   const nodeCountEl = document.getElementById('node-count');
   const detectEl = document.getElementById('detect-line');
   let cypherIdx = 0, running = false;
+
+  // The four narrative blocks beside the canvas follow the loop: each lights
+  // while the graph is doing that step.
+  const phaseBlocks = document.querySelectorAll('.case--graphgst [data-phase]');
+  const setPhase = (name) => phaseBlocks.forEach((b) => b.classList.toggle('is-phase', b.dataset.phase === name));
 
   function typeText(el, text, speed = 20) {
     return new Promise((resolve) => {
@@ -298,21 +333,31 @@
     if (running) return;
     running = true;
     while (running) {
-      await typeText(cypherEl, cypherLines[cypherIdx++ % cypherLines.length], 22);
+      setPhase('ingest');
       await typeText(nodeCountEl,
         `${(Math.random() * 400 + 800).toFixed(0)} entities · ${(Math.random() * 6000 + 3000).toFixed(0)} edges`, 12);
+      await new Promise(r => setTimeout(r, 500));
+      setPhase('traverse');
+      await typeText(cypherEl, cypherLines[cypherIdx++ % cypherLines.length], 22);
       await new Promise(r => setTimeout(r, 250));
       traceT = 0;
       await animateTrace(1, reduced ? 1 : 1900);
+      setPhase('verify');
+      await typeText(detectEl, 'isolation forest · scoring subgraph…', 15);
+      await new Promise(r => setTimeout(r, 1100));
+      setPhase('explain');
       await typeText(detectEl, '1 circular trade cycle · 5 entities · flagged', 15);
-      await new Promise(r => setTimeout(r, 3400));
+      await new Promise(r => setTimeout(r, 3000));
       traceT = -1;
       await new Promise(r => setTimeout(r, 450));
     }
+    setPhase(null);
   }
 
   const io2 = new IntersectionObserver((entries) => {
     entries.forEach((e) => { if (e.isIntersecting) loop(); else running = false; });
   }, { threshold: 0.25 });
   io2.observe(canvas);
+
+  edges.forEach(([a, b]) => { neighbours[a].add(b); neighbours[b].add(a); });
 })();
