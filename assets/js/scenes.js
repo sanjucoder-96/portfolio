@@ -7,6 +7,7 @@
      section heads · manifesto read-along · case index rail
      experience line · DSA row ↔ radar · journey milestones
      contact (copy, local time, composer, network anchor) · footer name
+     (the contact section's signal line and profile destinations: hub.js)
 
    Runs after motion.js. Nothing here needs GSAP. */
 
@@ -161,9 +162,6 @@
   function initContact() {
     const contact = $('#contact');
     if (!contact) return;
-
-    const bento = $('.bento', contact);
-    if (bento) FX.inView(bento, () => bento.classList.add('is-in'), { threshold: 0.1 });
 
     // copy address
     $$('[data-copy]', contact).forEach((btn) => {

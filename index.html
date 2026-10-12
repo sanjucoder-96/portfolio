@@ -58,6 +58,47 @@
   <link rel="stylesheet" href="assets/styles.css" />
   <link rel="stylesheet" href="assets/interactions.css" />
 
+  <!-- Intro gate. Runs before first paint and decides whether the cinematic
+       intro plays: only on a fresh navigation to the top of the page, once per
+       session, never under reduced motion. Without JS the class is never set,
+       so the overlay (display:none by default) can never cover the page.
+       Also applies a saved light theme early, so nothing flashes dark first. -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var intro = window.__intro = { active: false, done: true, mode: 'none', t0: 0 };
+      try { if (localStorage.getItem('su_theme') === 'light') root.setAttribute('data-theme', 'light'); } catch (e) {}
+      try {
+        var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+        var fresh = !nav || nav.type === 'navigate';
+        if (fresh && !location.hash
+            && sessionStorage.getItem('su_intro') !== '1'
+            && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          var seenBefore = false;
+          try { seenBefore = localStorage.getItem('su_intro_seen') === '1'; } catch (e) {}
+          intro.active = true; intro.done = false;
+          intro.mode = seenBefore ? 'short' : 'full';
+          intro.t0 = performance.now();
+          root.classList.add('is-intro');
+          // Last resort, for the case where loader.js itself never runs (blocked, 404):
+          // release everything that is waiting on the intro's events. loader.js is a
+          // synchronous script at the top of <body>, so if it has not checked in by
+          // DOMContentLoaded it is not coming; the timer covers everything else.
+          var release = function () {
+            if (intro.done) return;
+            intro.active = false; intro.done = true; intro.handed = true;
+            root.classList.remove('is-intro');
+            ['intro:handoff', 'intro:landed', 'intro:done'].forEach(function (n) {
+              try { window.dispatchEvent(new Event(n)); } catch (e) {}
+            });
+          };
+          document.addEventListener('DOMContentLoaded', function () { if (!intro.alive) release(); });
+          setTimeout(release, 9000);
+        }
+      } catch (e) { /* storage or timing API blocked: no intro, page shows normally */ }
+    })();
+  </script>
+
   <!-- Structured data -->
   <script type="application/ld+json">
   {
@@ -85,6 +126,26 @@
 
   <!-- Keyboard users land here first — jumps past the fixed nav into content. -->
   <a class="skip-link" href="#home">Skip to content</a>
+
+  <!-- ─────────────── Intro overlay ───────────────
+       Shown only when the gate above sets html.is-intro. loader.js drives it and
+       removes it; a CSS animation hides it on its own if that script never runs. -->
+  <div class="loader" id="loader" role="status" aria-label="Intro — loading the portfolio">
+    <canvas class="loader__canvas" aria-hidden="true"></canvas>
+    <p class="loader__name" aria-hidden="true">Sanjay <i>Utchula</i></p>
+    <div class="loader__hud" aria-hidden="true">
+      <span class="loader__tag mono">SU · 001 / boot</span>
+      <ol class="loader__log mono">
+        <li data-step="type"><span>typefaces</span><b>…</b></li>
+        <li data-step="motion"><span>motion engine</span><b>…</b></li>
+        <li data-step="webgl"><span>webgl renderer</span><b>…</b></li>
+        <li data-step="figure"><span>particle figure</span><b>…</b></li>
+      </ol>
+      <span class="loader__bar"><i></i></span>
+    </div>
+    <button class="loader__skip mono" type="button">skip intro <span aria-hidden="true">↵</span></button>
+  </div>
+  <script src="assets/js/loader.js"></script>
 
   <!-- ─────────────── Icon sprite (inline SVG symbols) ─────────────── -->
   <svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg">
@@ -390,9 +451,10 @@
       <p class="manifesto__text" data-split>
         <span class="highlight">I don't build demos.</span>
         I build the layer under the demo —
-        the graph traversal, the queue, the anomaly
-        detector, the SSO handshake, the sliding
-        window that keeps events in order at 60fps.
+        the graph traversal, the policy gate, the
+        delivery queue, the SSO handshake, the risk
+        engine that explains its own score, the
+        server that settles every bid.
         Every project on this page ran end-to-end,
         in production or under a judging panel, with
         real inputs and real failure modes.
@@ -1413,6 +1475,9 @@
        ═══════════════════════════════════════════════ -->
   <section id="contact" class="contact" data-scene="contact">
     <canvas class="constellation-bg" data-constellation="contact" aria-hidden="true"></canvas>
+    <!-- One line of light runs down the margin of this section: it reaches the email
+         call first, branches into the three profiles, and ends in the footer. -->
+    <svg class="signal-line" aria-hidden="true" focusable="false"></svg>
     <div class="section__head">
       <span class="section__index mono">§08</span>
       <span class="section__kicker mono">Contact</span>
@@ -1427,10 +1492,16 @@
           </h2>
 
           <div class="contact__cta">
-            <a class="mail magnetic" id="mail-link" href="mailto:sanjayutchula09@gmail.com" data-cursor="mail">
-              <span class="mail__label mono">write</span>
-              <span class="mail__addr">sanjayutchula09@gmail.com</span>
-              <span class="mail__arrow" aria-hidden="true">↗</span>
+            <a class="signal magnetic" id="mail-link" href="mailto:sanjayutchula09@gmail.com" data-cursor="mail">
+              <span class="signal__core" aria-hidden="true">
+                <i></i><i></i>
+                <svg viewBox="0 0 24 24" width="22" height="22"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7.5 12 13l8.5-5.5"/></g></svg>
+              </span>
+              <span class="signal__text">
+                <span class="signal__label mono">open a channel</span>
+                <span class="signal__addr">sanjayutchula09@gmail.com</span>
+              </span>
+              <span class="signal__arrow" aria-hidden="true">↗</span>
             </a>
             <button class="copy-btn mono" type="button" data-copy="sanjayutchula09@gmail.com" aria-label="Copy email address">
               <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3 10.5V3.8A1.3 1.3 0 0 1 4.3 2.5H11" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -1481,83 +1552,94 @@
         </form>
       </div>
 
-      <p class="contact__elsewhere mono">/ or find the work elsewhere</p>
-      <div class="bento bento--trio" role="list" aria-label="Profiles">
+      <div class="hub" id="hub">
+        <p class="hub__head mono"><span>/ three more ways in</span><span class="hub__note">each opens in a new tab</span></p>
 
-        <!-- Primary: GitHub -->
-        <a class="pnode pnode--primary" data-spot href="https://github.com/sanjucoder-96" target="_blank" rel="noopener noreferrer" data-cursor="external" data-social="github" role="listitem">
-          <div class="pnode__head">
-            <span class="pnode__icon"><svg><use href="#i-github"/></svg></span>
-            <span class="pnode__badge mono">primary</span>
-          </div>
-          <div class="pnode__grow">
-            <span class="pnode__viz pnode__viz--github" aria-hidden="true">
-              <svg viewBox="0 0 140 50" preserveAspectRatio="none"></svg>
+        <div class="hub__grid">
+
+          <!-- GitHub — a commit graph: the home of the engineering work -->
+          <a class="dest dest--github" href="https://github.com/sanjucoder-96" target="_blank" rel="noopener noreferrer"
+             data-cursor="external" data-social="github" data-spot aria-label="GitHub — github.com/sanjucoder-96, opens in a new tab">
+            <span class="dest__port" aria-hidden="true"></span>
+            <span class="dest__go mono" aria-hidden="true"><span>open profile</span><span class="dest__arrow">↗</span></span>
+            <span class="dest__viz" aria-hidden="true">
+              <svg class="gitgraph" viewBox="0 0 440 210" preserveAspectRatio="xMidYMid meet">
+                <path class="gg gg--main" pathLength="1" d="M10 150 H430"/>
+                <path class="gg gg--a" pathLength="1" d="M70 150 C100 150 100 95 130 95 H230 C260 95 260 150 290 150"/>
+                <path class="gg gg--b" pathLength="1" d="M170 95 C195 95 195 45 220 45 H330 C360 45 360 150 390 150"/>
+                <path class="gg gg--c" pathLength="1" d="M150 150 C172 150 172 190 194 190 H250 C272 190 272 150 290 150"/>
+                <path class="gg__pulse" pathLength="1" d="M10 150 H430"/>
+                <g class="gg__commits">
+                  <circle class="gc gc--main" style="--i:0" cx="10" cy="150" r="5"/>
+                  <circle class="gc gc--main" style="--i:1" cx="70" cy="150" r="5"/>
+                  <circle class="gc gc--a" style="--i:2" cx="130" cy="95" r="5"/>
+                  <circle class="gc gc--main" style="--i:3" cx="150" cy="150" r="5"/>
+                  <circle class="gc gc--a" style="--i:4" cx="170" cy="95" r="5"/>
+                  <circle class="gc gc--b" style="--i:5" cx="220" cy="45" r="5"/>
+                  <circle class="gc gc--a" style="--i:6" cx="230" cy="95" r="5"/>
+                  <circle class="gc gc--main" style="--i:7" cx="235" cy="150" r="5"/>
+                  <circle class="gc gc--c" style="--i:8" cx="194" cy="190" r="5"/>
+                  <circle class="gc gc--b" style="--i:9" cx="275" cy="45" r="5"/>
+                  <circle class="gc gc--main" style="--i:10" cx="290" cy="150" r="5"/>
+                  <circle class="gc gc--c" style="--i:11" cx="250" cy="190" r="5"/>
+                  <circle class="gc gc--b" style="--i:12" cx="330" cy="45" r="5"/>
+                  <circle class="gc gc--main" style="--i:13" cx="360" cy="150" r="5"/>
+                  <circle class="gc gc--main" style="--i:14" cx="390" cy="150" r="5"/>
+                  <circle class="gc gc--head" style="--i:15" cx="430" cy="150" r="7"/>
+                </g>
+                <circle class="gg__ping" cx="430" cy="150" r="7"/>
+              </svg>
+              <span class="gitgraph__tag mono">HEAD → main</span>
             </span>
-          </div>
-          <div class="pnode__foot">
-            <div>
-              <span class="pnode__name">GitHub</span>
-              <span class="pnode__handle mono">/sanjucoder-96</span>
-            </div>
-            <span class="pnode__note">Open-source projects &amp; commits</span>
-          </div>
-          <span class="pnode__arrow" aria-hidden="true">↗</span>
-        </a>
+            <span class="dest__body">
+              <span class="dest__kicker mono">01 · where the systems live</span>
+              <span class="dest__name">GitHub</span>
+              <span class="dest__handle mono">github.com/sanjucoder-96</span>
+            </span>
+          </a>
 
-        <!-- LinkedIn -->
-        <a class="pnode pnode--wide" data-spot href="https://www.linkedin.com/in/sanjay-utchula-542a1131b/" target="_blank" rel="noopener noreferrer" data-cursor="external" data-social="linkedin" role="listitem">
-          <div class="pnode__head">
-            <span class="pnode__icon"><svg><use href="#i-linkedin"/></svg></span>
-          </div>
-          <div class="pnode__viz pnode__viz--linkedin" aria-hidden="true">
-            <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-              <circle cx="15" cy="20" r="3" fill="currentColor"/>
-              <circle cx="40" cy="10" r="2" fill="currentColor"/>
-              <circle cx="55" cy="30" r="2" fill="currentColor"/>
-              <circle cx="72" cy="15" r="2" fill="currentColor"/>
-              <circle cx="88" cy="26" r="3" fill="currentColor"/>
-              <line x1="15" y1="20" x2="40" y2="10" stroke="currentColor" stroke-width=".8"/>
-              <line x1="15" y1="20" x2="55" y2="30" stroke="currentColor" stroke-width=".8"/>
-              <line x1="40" y1="10" x2="72" y2="15" stroke="currentColor" stroke-width=".8"/>
-              <line x1="55" y1="30" x2="72" y2="15" stroke="currentColor" stroke-width=".8"/>
-              <line x1="72" y1="15" x2="88" y2="26" stroke="currentColor" stroke-width=".8"/>
-              <line x1="55" y1="30" x2="88" y2="26" stroke="currentColor" stroke-width=".8"/>
-            </svg>
-          </div>
-          <div class="pnode__foot">
-            <div>
-              <span class="pnode__name">LinkedIn</span>
-              <span class="pnode__handle mono">/in/sanjay-utchula-542a1131b</span>
-            </div>
-            <span class="pnode__note">Background &amp; experience</span>
-          </div>
-          <span class="pnode__arrow" aria-hidden="true">↗</span>
-        </a>
+          <!-- LinkedIn — an identity plate: the professional record -->
+          <a class="dest dest--linkedin" href="https://www.linkedin.com/in/sanjay-utchula-542a1131b/" target="_blank" rel="noopener noreferrer"
+             data-cursor="external" data-social="linkedin" data-spot aria-label="LinkedIn — linkedin.com/in/sanjay-utchula-542a1131b, opens in a new tab">
+            <span class="dest__port" aria-hidden="true"></span>
+            <span class="dest__go mono" aria-hidden="true"><span>open profile</span><span class="dest__arrow">↗</span></span>
+            <span class="dest__viz" aria-hidden="true">
+              <span class="idrings"><i></i><i></i><i></i></span>
+              <span class="idplate">
+                <span class="idplate__top">
+                  <svg class="idplate__mark"><use href="#i-linkedin"/></svg>
+                  <span class="idplate__tag mono">profile</span>
+                </span>
+                <span class="idplate__who">Sanjay Utchula</span>
+                <span class="idplate__role">AI · Backend · Knowledge graphs</span>
+                <span class="idplate__meta mono"><span>Hyderabad, IN</span><span>open to 2027 internships</span></span>
+                <span class="idplate__shine"></span>
+              </span>
+            </span>
+            <span class="dest__body">
+              <span class="dest__kicker mono">02 · professional identity</span>
+              <span class="dest__name">LinkedIn</span>
+              <span class="dest__handle mono">linkedin.com/in/sanjay-utchula-542a1131b</span>
+            </span>
+          </a>
 
-        <!-- LeetCode -->
-        <a class="pnode pnode--wide" data-spot href="https://leetcode.com/u/sanju_dev_09/" target="_blank" rel="noopener noreferrer" data-cursor="external" data-social="leetcode" role="listitem">
-          <div class="pnode__head">
-            <span class="pnode__icon"><svg><use href="#i-leetcode"/></svg></span>
-          </div>
-          <div class="pnode__viz pnode__viz--leetcode" aria-hidden="true">
-            <svg viewBox="0 0 100 40" preserveAspectRatio="xMidYMid meet">
-              <path d="M0 32 Q20 32 25 24 T50 15 T75 8 T100 4" fill="none" stroke="currentColor" stroke-width="1"/>
-              <circle cx="25" cy="24" r="1.6" fill="currentColor"/>
-              <circle cx="50" cy="15" r="1.6" fill="currentColor"/>
-              <circle cx="75" cy="8" r="1.6" fill="currentColor"/>
-            </svg>
-          </div>
-          <div class="pnode__foot">
-            <div>
-              <span class="pnode__name">LeetCode</span>
-              <span class="pnode__handle mono">/u/sanju_dev_09</span>
-            </div>
-            <span class="pnode__note">DSA problem solving</span>
-          </div>
-          <span class="pnode__arrow" aria-hidden="true">↗</span>
-        </a>
+          <!-- LeetCode — a pathfinder: the problem-solving log -->
+          <a class="dest dest--leetcode" href="https://leetcode.com/u/sanju_dev_09/" target="_blank" rel="noopener noreferrer"
+             data-cursor="external" data-social="leetcode" data-spot aria-label="LeetCode — leetcode.com/u/sanju_dev_09, opens in a new tab">
+            <span class="dest__port" aria-hidden="true"></span>
+            <span class="dest__go mono" aria-hidden="true"><span>open profile</span><span class="dest__arrow">↗</span></span>
+            <span class="dest__viz" aria-hidden="true">
+              <span class="maze" data-maze></span>
+              <span class="maze__read mono" data-maze-read>bfs · shortest path</span>
+            </span>
+            <span class="dest__body">
+              <span class="dest__kicker mono">03 · problem-solving log</span>
+              <span class="dest__name">LeetCode</span>
+              <span class="dest__handle mono">leetcode.com/u/sanju_dev_09</span>
+            </span>
+          </a>
 
+        </div>
       </div>
     </div>
 
@@ -1606,6 +1688,7 @@
   <script src="assets/js/main.js"></script>
   <script src="assets/js/motion.js"></script>
   <script src="assets/js/scenes.js"></script>
+  <script src="assets/js/hub.js"></script>
   <script src="assets/js/analytics.js"></script>
 
   <!-- Three.js is loaded as an ES module only for the hero particle core.
