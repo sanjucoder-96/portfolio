@@ -245,7 +245,7 @@ window.addEventListener('unhandledrejection', (e) => {
   // ──────────────────────────────────────────────
   //  2. Intro master timeline
   // ──────────────────────────────────────────────
-  function runIntro() {
+  function runIntro(fromLoader = false) {
     const S = introScale; // 0 = reduced motion / already seen full intro
     const canvas = window.__heroCanvas;
 
@@ -280,6 +280,30 @@ window.addEventListener('unhandledrejection', (e) => {
       onComplete: () => store.set('sessionStorage', 'su_intro', '1'),
     });
 
+    if (fromLoader) {
+      /* The intro overlay's particles are about to fly into the headline's exact
+         glyphs. Seat that line now — the overlay measures it right after this
+         listener returns — and bring it up when they land. Everything else
+         follows on a tightened clock: the visitor has already watched an intro. */
+      const lines = gsap.utils.toArray('.hero__line-inner');
+      const name = lines[0];
+      gsap.set(name, { yPercent: 0, opacity: 0 });
+      let shown = false;
+      const showName = () => { if (shown) return; shown = true; gsap.to(name, { opacity: 1, duration: 0.45, ease: 'power2.out' }); };
+      window.addEventListener('intro:landed', showName, { once: true });
+      gsap.delayedCall(1.8, showName);                    // never left hidden if that event is missed
+
+      tl.to('.hero__eyebrow', { opacity: 1, y: 0, duration: 0.7 }, 0.3)
+        .to(lines.slice(1), { yPercent: 0, duration: 1.0, stagger: 0.1 }, 0.55)
+        .to('.hero__body', { opacity: 1, y: 0, duration: 0.8 }, 0.95)
+        .to('.hero__cta', { opacity: 1, y: 0, duration: 0.75 }, 1.1)
+        .to('.hero__rail', { opacity: 1, y: 0, duration: 0.75 }, 1.2)
+        .set('.hero__metrics', { opacity: 1 }, 1.3)
+        .to('.hero .metric', { opacity: 1, y: 0, duration: 0.65, stagger: 0.08 }, 1.3)
+        .to('.hero__scroll', { opacity: 1, y: 0, duration: 0.6 }, 1.6);
+      return;
+    }
+
     tl.to('.hero__eyebrow', { opacity: 1, y: 0, duration: d(0.7) }, d(0.15))
       .to('.hero__line-inner', { yPercent: 0, duration: d(1.1), stagger: d(0.12) }, d(0.55))
       .to('.hero__body', { opacity: 1, y: 0, duration: d(0.85) }, d(1.35))
@@ -310,9 +334,12 @@ window.addEventListener('unhandledrejection', (e) => {
       // Wait until after the intro sequence has revealed the metrics container.
       // safeST's own "already above viewport" check then fires playMetrics at
       // exactly the right moment (or later, on scroll).
-      gsap.delayedCall(seenIntro ? 1.3 : 2.1, () => {
+      const armMetrics = () => gsap.delayedCall(seenIntro ? 1.3 : 2.1, () => {
         safeST({ trigger: metricsEl, start: 'top 82%', once: true, onEnter: playMetrics });
       });
+      const waiting = window.__intro;
+      if (waiting && waiting.active && !waiting.handed) window.addEventListener('intro:handoff', armMetrics, { once: true });
+      else armMetrics();
     }
   }
 
@@ -451,14 +478,14 @@ window.addEventListener('unhandledrejection', (e) => {
   }
 
   // Contact rows + mail
-  gsap.set('.contact__eyebrow, .mail, .copy-btn, .contact__facts li', { opacity: 0, y: 16 });
+  gsap.set('.contact__eyebrow, .signal, .copy-btn, .contact__facts li', { opacity: 0, y: 16 });
   gsap.set('.composer', { opacity: 0, y: 28 });
   safeST({
     trigger: '.contact', start: 'top 70%', once: true,
     onEnter: () => {
       gsap.to('.contact__eyebrow', { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out' });
-      // .mail is magnetic (main.js writes its transform), so hand the property back
-      gsap.to('.mail, .copy-btn', { opacity: 1, y: 0, duration: 0.8, ease: 'expo.out', delay: 0.25, stagger: 0.08, clearProps: 'transform' });
+      // .signal is magnetic (main.js writes its transform), so hand the property back
+      gsap.to('.signal, .copy-btn', { opacity: 1, y: 0, duration: 0.8, ease: 'expo.out', delay: 0.25, stagger: 0.08, clearProps: 'transform' });
       gsap.to('.contact__facts li', { opacity: 1, y: 0, duration: 0.6, stagger: 0.07, ease: 'expo.out', delay: 0.45 });
       gsap.to('.composer', { opacity: 1, y: 0, duration: 1.0, ease: 'expo.out', delay: 0.3, clearProps: 'transform' });
     },
@@ -702,12 +729,21 @@ window.addEventListener('unhandledrejection', (e) => {
   //  12. Run intro on first paint
   //  The constellation field + 3D core handle their own boot phases internally
   // ──────────────────────────────────────────────
-  const kick = () => {
-    try { runIntro(); } catch (e) { console.warn('runIntro failed:', e.message); }
+  let kicked = false;
+  const kick = (fromLoader) => {
+    if (kicked) return;
+    kicked = true;
+    try { runIntro(fromLoader === true); } catch (e) { console.warn('runIntro failed:', e.message); }
     setTimeout(() => { try { ScrollTrigger.refresh(); } catch (e) {} }, 100);
   };
-  if (document.readyState === 'complete') kick();
-  else window.addEventListener('load', kick, { once: true });
+  /* With the intro overlay up, the hero waits for its hand-off; the overlay
+     always fires it (even when skipped or aborted). Otherwise: first paint. */
+  const overlay = window.__intro;
+  if (overlay && overlay.active && !overlay.handed) {
+    window.addEventListener('intro:handoff', () => kick(true), { once: true });
+    setTimeout(() => kick(false), 12000);                 // belt and braces
+  } else if (document.readyState === 'complete') kick();
+  else window.addEventListener('load', () => kick(), { once: true });
   } catch (err) {
     console.warn('motion.js setup error (non-fatal):', err.message);
   }

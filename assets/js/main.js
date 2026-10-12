@@ -29,6 +29,13 @@
   // Expose for motion.js
   window.__lenis = lenis;
 
+  // The intro overlay lands on the hero headline, so the page stays put until it hands off.
+  const intro = window.__intro;
+  if (lenis && intro && intro.active && !intro.handed) {
+    lenis.stop();
+    window.addEventListener('intro:handoff', () => lenis.start(), { once: true });
+  }
+
   // ─────────────── Nav scroll state ───────────────
   const nav = document.querySelector('.nav');
   function onScroll() {

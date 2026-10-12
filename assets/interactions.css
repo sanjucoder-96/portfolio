@@ -895,8 +895,6 @@ html:not(.fx-ready) .journey__fill { transform: none; }
 .contact__title { max-width: 12ch; }
 @media (min-width: 1025px) { .contact__title { font-size: clamp(3rem, 5.9vw, 5.8rem); } }
 .contact__cta { margin: 2.25rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.5rem; }
-.mail { max-width: 100%; }
-.mail__addr { overflow-wrap: anywhere; }
 
 .copy-btn {
   display: inline-flex; align-items: center; gap: 0.5rem;
@@ -979,20 +977,6 @@ textarea.composer__input { min-height: 6.2em; display: block; }
   .composer__send { width: 100%; justify-content: center; }
 }
 
-/* profile row */
-.bento { margin-top: clamp(2.5rem, 5vw, 4rem); }
-.pnode > .spot { z-index: 0; }
-.fx-ready .bento .pnode { opacity: 0; translate: 0 20px; }
-.fx-ready .bento.is-in .pnode {
-  opacity: 1; translate: 0 0;
-  transition: opacity .7s var(--e-out), translate .7s var(--e-out), transform .35s var(--e-out), border-color .3s, background .3s;
-}
-.bento.is-in .pnode:nth-child(2) { transition-delay: .05s, .05s, 0s, 0s, 0s; }
-.bento.is-in .pnode:nth-child(3) { transition-delay: .10s, .10s, 0s, 0s, 0s; }
-.bento.is-in .pnode:nth-child(4) { transition-delay: .15s, .15s, 0s, 0s, 0s; }
-.bento.is-in .pnode:nth-child(5) { transition-delay: .20s, .20s, 0s, 0s, 0s; }
-.bento.is-in .pnode:nth-child(6) { transition-delay: .25s, .25s, 0s, 0s, 0s; }
-
 /* ═══════════════════════════════════════════════════════════
    FOOTER — final scene
    ═══════════════════════════════════════════════════════════ */
@@ -1057,13 +1041,6 @@ textarea.composer__input { min-height: 6.2em; display: block; }
 /* ─── Fit & finish ─── */
 /* bit groups wrap whole — a byte split across lines stops reading as a byte */
 .pixel-viz__bits { word-break: normal; overflow-wrap: normal; }
-/* the address shares a half-width column with the composer on desktop */
-.contact__lead .mail__addr { font-size: clamp(1.15rem, 2.05vw, 1.9rem); }
-@media (max-width: 560px) {
-  .contact__lead .mail { gap: 0.6rem; }
-  .contact__lead .mail__label { display: none; }
-  .contact__lead .mail__addr { font-size: 1.05rem; }
-}
 @media (max-width: 900px) {
   /* stacked flow: arrows become short vertical ticks (styles.css), keep them 1px wide */
   .hook-flow__arrow { width: 1px; min-width: 0; height: 14px; }
@@ -1097,37 +1074,6 @@ textarea.composer__input { min-height: 6.2em; display: block; }
 :root[data-theme="light"] .tech[data-brand="node"]   { --brand: #3C7A2F; }
 :root[data-theme="light"] .tech[data-brand="sqlite"] { --brand: #0B5E96; }
 
-/* ─── Contact: one profile row — GitHub, LinkedIn, LeetCode ─── */
-.contact__elsewhere { margin-top: clamp(2.5rem, 5vw, 4rem); padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--fg-4); font-size: 0.66rem; }
-.bento.bento--trio {
-  margin-top: 1.1rem;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
-  grid-auto-rows: 232px;
-}
-.bento--trio .pnode--primary, .bento--trio .pnode--wide { grid-column: auto; grid-row: auto; padding: 1.25rem 1.35rem 1.15rem; }
-.bento--trio .pnode--primary .pnode__viz--github { min-height: 0; }
-.bento--trio .pnode__grow { min-height: 0; overflow: hidden; }
-/* in this row the micro-viz is the body of the card, not a corner ornament */
-.bento--trio .pnode--wide .pnode__viz {
-  position: static; flex: 1 1 auto;
-  width: 100%; height: auto; min-height: 56px; max-height: 84px;
-  margin: 0.9rem 0;
-}
-.bento--trio .pnode--wide .pnode__viz svg { margin: 0; width: 100%; height: 100%; }
-.bento--trio .pnode__note { max-width: 50%; }
-.bento--trio .pnode--wide .pnode__arrow { opacity: 0.6; }
-@media (max-width: 900px) {
-  .bento.bento--trio { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(200px, auto); }
-  .bento--trio .pnode--primary { grid-column: 1 / -1; }
-  .bento--trio .pnode__note { display: none; }
-}
-@media (max-width: 560px) {
-  .bento.bento--trio { grid-template-columns: 1fr; grid-auto-rows: auto; }
-  .bento--trio .pnode--primary { min-height: 176px; }
-  .bento--trio .pnode--wide { min-height: 0; }
-  .bento--trio .pnode--wide .pnode__viz { flex: 0 0 auto; height: 48px; min-height: 0; margin: 0.6rem 0 0.8rem; }
-  .bento--trio .pnode__note { display: block; }
-}
 
 /* DSA rows are controls now: they play their algorithm in the radar */
 .dsa__topics li { position: relative; }
@@ -1176,3 +1122,362 @@ textarea.composer__input { min-height: 6.2em; display: block; }
 .eco__hint { display: none; flex-basis: 100%; color: var(--fg-4); font-size: 0.6rem; }
 .eco.eco--compact .eco__hint { display: block; }
 .eco.eco--compact .eco__readout { align-self: center; width: min(100%, 460px); }
+
+/* ═══════════════════════════════════════════════════════════
+   INTRO OVERLAY  (loader.js)
+   display:none unless the gate in <head> set html.is-intro, so it can
+   never cover the page without JavaScript. If the script that drives it
+   never runs, the failsafe animation removes it on its own.
+   ═══════════════════════════════════════════════════════════ */
+.loader { display: none; }
+html.is-intro .loader {
+  display: block; position: fixed; inset: 0; z-index: 9000;
+  background-color: var(--bg);
+  overscroll-behavior: contain; touch-action: none; cursor: pointer;
+  transition: background-color .78s cubic-bezier(.65, 0, .35, 1);
+  animation: loader-failsafe 0.01s linear 9s forwards;
+}
+@keyframes loader-failsafe { to { visibility: hidden; pointer-events: none; } }
+.loader::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60vw 46vh at 50% 48%, rgba(var(--rgb-graph), 0.075), transparent 70%);
+  transition: opacity .5s ease;
+}
+/* must out-rank `html.is-intro .loader` above, or the ground never clears and the hero
+   stays covered until the overlay is removed — hiding the figure as it assembles */
+html.is-intro .loader.is-leaving { background-color: rgba(var(--rgb-bg), 0); pointer-events: none; }
+.loader.is-leaving::before { opacity: 0; }
+.loader__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* only shown when there is no canvas to draw the name with */
+.loader__name {
+  position: absolute; left: 0; right: 0; top: 50%; margin: 0; transform: translateY(-58%);
+  text-align: center; font-family: var(--font-display); font-weight: 500;
+  font-size: clamp(2.6rem, 11vw, 9rem); line-height: 1; letter-spacing: -0.035em; color: var(--accent-hero);
+  opacity: 0; transition: opacity .7s ease;
+}
+.loader__name i { font-family: var(--font-italic); font-weight: 400; }
+.loader--plain .loader__name { opacity: 1; }
+.loader--plain.is-leaving .loader__name { opacity: 0; transition-duration: .4s; }
+
+.loader__hud {
+  position: absolute; left: var(--pad); bottom: clamp(1.5rem, 5vh, 3rem);
+  display: grid; gap: 0.7rem; min-width: min(19rem, calc(100vw - 2 * var(--pad)));
+  transition: opacity .28s ease;
+}
+.loader.is-leaving .loader__hud, .loader.is-leaving .loader__skip { opacity: 0; }
+.loader__tag { color: var(--fg-4); font-size: 0.62rem; letter-spacing: 0.14em; }
+.loader__log { display: grid; gap: 0.28rem; font-size: 0.62rem; }
+.loader__log li { display: flex; justify-content: space-between; gap: 2rem; color: var(--fg-4); transition: color .3s; }
+.loader__log li b { font-weight: 400; color: var(--fg-4); transition: color .3s; text-transform: none; letter-spacing: 0.04em; }
+.loader__log li[data-state="busy"] { color: var(--fg-2); }
+.loader__log li[data-state="busy"] b { color: var(--accent-warm); }
+.loader__log li[data-state="ok"] { color: var(--fg-2); }
+.loader__log li[data-state="ok"] b { color: var(--accent-graph); }
+.loader__log li[data-state="skip"] b { color: var(--fg-3); }
+.loader__bar { display: block; height: 1px; background: rgba(var(--rgb-fg), 0.1); overflow: hidden; }
+.loader__bar i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--accent-graph), var(--accent-warm));
+  transform-origin: left; transform: scaleX(0);
+  transition: transform .5s var(--e-out);
+}
+.loader__skip {
+  position: absolute; right: var(--pad); bottom: clamp(1.5rem, 5vh, 3rem);
+  padding: 0.55rem 0.9rem; min-height: 36px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  color: var(--fg-3); font-size: 0.62rem; background: rgba(var(--rgb-bg), 0.4);
+  transition: color .25s, border-color .25s, opacity .28s ease;
+}
+.loader__skip:hover, .loader__skip:focus-visible { color: var(--fg); border-color: var(--accent-graph); }
+@media (max-width: 560px) {
+  .loader__hud { bottom: 4.6rem; }
+  .loader__skip { left: var(--pad); right: auto; bottom: 1.4rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONTACT — the signal line, the call, and three destinations
+   (behaviour: hub.js)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── The line of light that runs the section's margin ─── */
+.signal-line {
+  position: absolute; left: 0; top: 0; z-index: 1;
+  overflow: visible; pointer-events: none;
+}
+#contact > .signal-line { position: absolute; }                   /* not swept up by the stacking-context rule */
+.signal-line path, .signal-line circle { fill: none; vector-effect: non-scaling-stroke; }
+.sl__base { stroke: var(--line-strong); stroke-width: 1; }
+.sl__lit { stroke: var(--accent-graph); stroke-width: 1.25; stroke-linecap: round; transition: stroke-dashoffset .9s var(--e-out); }
+.sl__lit--trunk { transition: none; }                             /* the trunk is scrubbed by scroll, not eased */
+.sl__glow { stroke: rgba(var(--rgb-graph), 0.16); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .9s var(--e-out); }
+.sl__glow--trunk { transition: none; }
+.sl__head { fill: var(--accent-graph) !important; opacity: 0; transition: opacity .4s; }
+.sl__halo { fill: rgba(var(--rgb-graph), 0.22) !important; opacity: 0; transition: opacity .4s; }
+.signal-line.is-drawn .sl__head, .signal-line.is-drawn .sl__halo { opacity: 1; }
+.sl__end { stroke: var(--line-strong); stroke-width: 1; transition: stroke .4s; }
+.sl__end.is-on { stroke: var(--accent-graph); }
+/* a packet runs each open branch */
+.sl__dash { stroke: var(--fg); stroke-width: 1.8; stroke-linecap: round; opacity: 0; }
+.sl__dash.is-on { opacity: 0.9; animation: sl-run 2.8s linear infinite; }
+.contact:not(.is-live) .sl__dash.is-on { animation-play-state: paused; }
+.contact.is-calling .sl__dash.is-on { stroke: var(--accent-graph); stroke-width: 2.6; animation-duration: 1.1s; }
+@keyframes sl-run {
+  from { stroke-dashoffset: 12px; }
+  to   { stroke-dashoffset: calc(var(--len) * -1px); }
+}
+
+/* ─── Primary action ─── */
+.contact__cta { margin: 2.25rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem 1.25rem; }
+.signal {
+  position: relative; z-index: 3;
+  display: inline-flex; align-items: center; gap: 1.1rem;
+  max-width: 100%; padding: 0.7rem 1.5rem 0.7rem 0.7rem;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-1) 82%, transparent);
+  color: var(--fg);
+  transition: border-color .35s, box-shadow .45s, background .35s;
+}
+.signal__core {
+  position: relative; flex: 0 0 auto;
+  width: 54px; height: 54px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-graph); color: #041614;
+  transition: transform .35s var(--e-out);
+}
+:root[data-theme="light"] .signal__core { color: #fff; }
+.signal__core i {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1px solid var(--accent-graph);
+  animation: signal-ring 2.8s cubic-bezier(.2, .6, .3, 1) infinite;
+}
+.signal__core i:nth-child(2) { animation-delay: 1.4s; }
+.contact:not(.is-live) .signal__core i { animation-play-state: paused; }
+@keyframes signal-ring {
+  from { transform: scale(1); opacity: 0.7; }
+  to   { transform: scale(2.1); opacity: 0; }
+}
+.signal__text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.signal__label { color: var(--fg-3); font-size: 0.62rem; transition: color .3s; }
+.signal__addr {
+  font-family: var(--font-display); font-size: clamp(1.05rem, 1.9vw, 1.7rem);
+  letter-spacing: -0.02em; line-height: 1.15; overflow-wrap: anywhere;
+}
+.signal__arrow { font-size: 1.3rem; color: var(--fg-3); transition: color .3s, transform .35s var(--e-out); }
+.signal:hover, .signal:focus-visible {
+  border-color: var(--accent-graph);
+  background: color-mix(in srgb, var(--bg-1) 70%, rgba(var(--rgb-graph), 0.3));
+  box-shadow: 0 0 0 6px rgba(var(--rgb-graph), 0.07), 0 26px 60px -32px rgba(var(--rgb-graph), 0.9);
+}
+.signal:hover .signal__label, .signal:focus-visible .signal__label { color: var(--accent-graph); }
+.signal:hover .signal__arrow, .signal:focus-visible .signal__arrow { color: var(--accent-graph); transform: translate(4px, -4px); }
+.signal:hover .signal__core i, .signal:focus-visible .signal__core i { animation-duration: 1.2s; }
+.signal:active .signal__core { transform: scale(0.92); }
+@media (max-width: 560px) {
+  .signal { gap: 0.8rem; padding: 0.55rem 1.1rem 0.55rem 0.55rem; }
+  .signal__core { width: 44px; height: 44px; }
+  .signal__addr { font-size: 1rem; }
+  .signal__arrow { display: none; }
+}
+
+/* ─── The three destinations ───
+   One surface, three open fields — not three cards. Each field has a port
+   the signal line plugs into, a living motif, and its details always visible. */
+.hub { margin-top: clamp(3.5rem, 7vw, 6rem); position: relative; }
+.hub__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1.5rem; color: var(--fg-3); font-size: 0.66rem; margin-bottom: 2.6rem; }
+.hub__note { color: var(--fg-4); }
+.hub__grid { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+
+.dest {
+  position: relative; display: flex; flex-direction: column;
+  min-height: clamp(400px, 34vw, 470px);
+  padding: 2.5rem clamp(1.1rem, 2vw, 1.9rem) 1.9rem;
+  color: var(--fg); border-left: 1px solid var(--line);
+  --dest-rgb: var(--rgb-graph); --spot-rgb: var(--dest-rgb);
+  outline-offset: -3px;
+  transition: background .5s var(--e-out);
+}
+.dest:first-child { border-left: 0; }
+.dest--linkedin { --dest-rgb: 86, 148, 232; }
+.dest--leetcode { --dest-rgb: var(--rgb-warm); }
+:root[data-theme="light"] .dest--linkedin { --dest-rgb: 10, 102, 194; }
+.dest:hover, .dest:focus-visible { background: linear-gradient(180deg, rgba(var(--dest-rgb), 0.055), transparent 70%); }
+.dest:focus-visible { outline: 2px solid rgb(var(--dest-rgb)); border-radius: 4px; }
+
+/* where the line plugs in */
+.dest__port {
+  position: absolute; left: clamp(1.1rem, 2vw, 1.9rem); top: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--line-strong);
+  transition: background .4s, border-color .4s, box-shadow .5s;
+}
+.dest:first-child .dest__port { left: 0; }
+.dest.is-in .dest__port { background: rgb(var(--dest-rgb)); border-color: rgb(var(--dest-rgb)); box-shadow: 0 0 0 4px rgba(var(--dest-rgb), 0.16); }
+.dest:hover .dest__port, .dest:focus-visible .dest__port { box-shadow: 0 0 0 7px rgba(var(--dest-rgb), 0.2), 0 0 18px rgb(var(--dest-rgb)); }
+
+.dest__go {
+  position: absolute; right: clamp(1.1rem, 2vw, 1.9rem); top: 1.1rem;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  color: var(--fg-4); font-size: 0.6rem; transition: color .3s;
+}
+.dest__arrow { display: inline-block; font-size: 0.85rem; transition: transform .4s var(--e-out); }
+.dest:hover .dest__go, .dest:focus-visible .dest__go { color: rgb(var(--dest-rgb)); }
+.dest:hover .dest__arrow, .dest:focus-visible .dest__arrow { transform: translate(3px, -3px); }
+.dest.is-launching .dest__arrow { animation: dest-launch .6s var(--e-out); }
+@keyframes dest-launch {
+  40%  { transform: translate(16px, -16px); opacity: 0; }
+  41%  { transform: translate(-12px, 12px); opacity: 0; }
+  100% { transform: translate(0, 0); opacity: 1; }
+}
+
+.dest__viz { position: relative; flex: 1 1 auto; min-height: 190px; display: grid; place-items: center; margin: 0.5rem 0 1.6rem; }
+.dest__body { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.dest__kicker { color: var(--fg-3); font-size: 0.62rem; }
+.dest__name {
+  font-family: var(--font-display); font-weight: 500;
+  font-size: clamp(2rem, 3.3vw, 3.1rem); line-height: 1; letter-spacing: -0.04em;
+  transition: color .35s, transform .5s var(--e-out);
+}
+.dest:hover .dest__name, .dest:focus-visible .dest__name { transform: translateX(6px); }
+.dest__handle { color: var(--fg-2); font-size: 0.66rem; text-transform: none; letter-spacing: 0.02em; overflow-wrap: anywhere; margin-top: 0.35rem; }
+
+/* Hidden until the signal line reaches them — but only once hub.js has actually
+   taken over (.hub-ready), so a script failure can never leave them invisible. */
+.hub-ready .dest > *:not(.spot) { opacity: 0; transform: translateY(22px); transition: opacity .9s var(--e-out), transform .9s var(--e-out); }
+.hub-ready .dest > .dest__port { opacity: 1; transform: none; }
+.hub-ready .dest.is-in > *:not(.spot) { opacity: 1; transform: none; }
+.dest.is-in > .dest__body { transition-delay: .12s; }
+.hub-ready .dest > .dest__go { transform: none; }
+
+/* GitHub — a commit graph */
+.gitgraph { width: 100%; height: auto; max-height: 230px; overflow: visible; }
+.gg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.3s var(--e-out), stroke .4s; }
+.gg--main { stroke: rgba(var(--rgb-fg), 0.55); }
+.gg--a { stroke: var(--accent-graph); transition-delay: .35s, 0s; }
+.gg--b { stroke: var(--accent-agent); transition-delay: .6s, 0s; }
+.gg--c { stroke: var(--accent-warm); transition-delay: .8s, 0s; }
+.dest.is-in .gg, .contact:not(.hub-ready) .gg { stroke-dashoffset: 0; }
+.gc {
+  stroke: var(--bg); stroke-width: 2.5; transform-box: fill-box; transform-origin: center;
+  transform: scale(0); transition: transform .5s cubic-bezier(.3, 1.6, .5, 1);
+  transition-delay: calc(0.3s + var(--i) * 55ms);
+}
+.gc--main { fill: rgb(var(--rgb-fg)); }
+.gc--a { fill: var(--accent-graph); }
+.gc--b { fill: var(--accent-agent); }
+.gc--c { fill: var(--accent-warm); }
+.gc--head { fill: var(--accent-graph); }
+.dest.is-in .gc, .contact:not(.hub-ready) .gc { transform: scale(1); }
+/* a commit travelling the main line; a ping at HEAD when one "lands" */
+.gg__pulse { fill: none; stroke: var(--accent-graph); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 0.035 1; stroke-dashoffset: 0.035; opacity: 0; }
+.dest.is-in .gg__pulse { opacity: 1; animation: gg-run 4.2s cubic-bezier(.5, 0, .3, 1) 1.6s infinite; }
+.contact:not(.is-live) .gg__pulse { animation-play-state: paused; }
+.dest--github.is-push .gg__pulse { animation: gg-run .9s cubic-bezier(.5, 0, .3, 1) 1; }
+@keyframes gg-run { from { stroke-dashoffset: 0.035; } to { stroke-dashoffset: -1; } }
+.gg__ping { fill: none; stroke: var(--accent-graph); stroke-width: 1.5; transform-box: fill-box; transform-origin: center; opacity: 0; }
+.dest--github.is-push .gg__ping { animation: gg-ping .9s ease-out .75s 1; }
+@keyframes gg-ping { from { transform: scale(1); opacity: 0.9; } to { transform: scale(3.6); opacity: 0; } }
+.dest--github:hover .gg--main, .dest--github:focus-visible .gg--main { stroke: rgb(var(--rgb-fg)); }
+.gitgraph__tag {
+  position: absolute; right: 0; top: calc(50% + 24%);
+  padding: 0.22rem 0.5rem; border-radius: 4px;
+  border: 1px solid rgba(var(--rgb-graph), 0.5); background: rgba(var(--rgb-graph), 0.1);
+  color: var(--accent-graph); font-size: 0.56rem; text-transform: none; letter-spacing: 0.04em;
+}
+
+/* LinkedIn — an identity plate that leans toward the pointer */
+.dest--linkedin .dest__viz { perspective: 900px; }
+.idrings { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.idrings i {
+  position: absolute; width: 62%; aspect-ratio: 1; border-radius: 50%;
+  border: 1px solid rgba(var(--dest-rgb), 0.5); opacity: 0;
+}
+.dest.is-in .idrings i { animation: id-ring 5.4s linear infinite; }
+.dest.is-in .idrings i:nth-child(2) { animation-delay: 1.8s; }
+.dest.is-in .idrings i:nth-child(3) { animation-delay: 3.6s; }
+.contact:not(.is-live) .idrings i { animation-play-state: paused; }
+.dest--linkedin:hover .idrings i, .dest--linkedin:focus-visible .idrings i { animation-duration: 2.7s; }
+@keyframes id-ring { 0% { transform: scale(0.45); opacity: 0; } 18% { opacity: 0.75; } 100% { transform: scale(1.75); opacity: 0; } }
+.idplate {
+  position: relative; display: flex; flex-direction: column; gap: 0.3rem;
+  width: min(100%, 19rem); padding: 1.1rem 1.2rem 1.05rem;
+  border: 1px solid rgba(var(--dest-rgb), 0.38); border-radius: 14px;
+  background:
+    linear-gradient(140deg, rgba(var(--dest-rgb), 0.16), rgba(var(--dest-rgb), 0.03) 55%),
+    color-mix(in srgb, var(--bg-1) 94%, transparent);
+  box-shadow: 0 26px 60px -34px rgba(var(--dest-rgb), 0.95);
+  overflow: hidden;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0);
+  transition: border-color .4s, box-shadow .5s;
+  will-change: transform;
+}
+.dest--linkedin:hover .idplate, .dest--linkedin:focus-visible .idplate { border-color: rgba(var(--dest-rgb), 0.85); box-shadow: 0 34px 70px -30px rgb(var(--dest-rgb)); }
+.dest--linkedin:focus-visible .idplate { --rx: 5deg; --ry: -9deg; }
+.idplate__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
+.idplate__mark { width: 26px; height: 26px; }
+.idplate__tag { color: rgb(var(--dest-rgb)); font-size: 0.54rem; padding: 0.15rem 0.45rem; border: 1px solid rgba(var(--dest-rgb), 0.5); border-radius: 999px; }
+.idplate__who { font-family: var(--font-display); font-weight: 500; font-size: 1.3rem; letter-spacing: -0.025em; line-height: 1.1; }
+.idplate__role { color: var(--fg-2); font-size: 0.82rem; }
+.idplate__meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.2rem 0.8rem; margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px solid rgba(var(--dest-rgb), 0.25); color: var(--fg-3); font-size: 0.54rem; }
+.idplate__shine {
+  position: absolute; inset: -40% -60%; pointer-events: none;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
+  transform: translateX(calc(var(--shine, -0.6) * 60%));
+  opacity: 0; transition: opacity .4s;
+}
+.dest--linkedin:hover .idplate__shine { opacity: 1; }
+:root[data-theme="light"] .idplate__shine { background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.7) 50%, transparent 58%); }
+
+/* LeetCode — a pathfinder */
+.dest--leetcode .dest__viz { align-content: center; gap: 0.75rem; }
+.maze { display: grid; grid-template-columns: repeat(var(--cols, 13), 1fr); gap: 3px; width: 100%; max-width: 22rem; }
+.maze i {
+  aspect-ratio: 1; border-radius: 2px;
+  background: rgba(var(--rgb-fg), 0.045);
+  transition: background .28s ease, transform .28s ease, box-shadow .28s ease;
+  transition-delay: calc(var(--d, 0) * 30ms);
+}
+.maze.is-reset i { transition: none; }
+.maze i.is-wall { background: rgba(var(--rgb-fg), 0.3); }
+.maze i.is-seen { background: rgba(var(--dest-rgb), 0.2); }
+.maze i.is-path { background: rgb(var(--dest-rgb)); box-shadow: 0 0 10px rgba(var(--dest-rgb), 0.7); transform: scale(1.06); }
+.maze i.is-start { background: var(--accent-graph); box-shadow: 0 0 10px rgba(var(--rgb-graph), 0.8); }
+.maze i.is-goal { background: rgb(var(--dest-rgb)); box-shadow: 0 0 0 2px rgba(var(--dest-rgb), 0.3); }
+.maze__read { color: var(--fg-3); font-size: 0.58rem; text-transform: none; letter-spacing: 0.04em; justify-self: start; min-height: 1.2em; }
+.maze__read b { color: rgb(var(--dest-rgb)); font-weight: 400; }
+
+/* stacked: tablets get the three fields in a column, each plugged from the margin */
+@media (max-width: 960px) {
+  .hub__grid { grid-template-columns: 1fr; border-bottom: 0; }
+  .hub__head { margin-bottom: 1.25rem; }
+  .dest, .dest:first-child {
+    min-height: 0; border-left: 0; border-top: 1px solid var(--line);
+    padding: 2.4rem 0 2.2rem;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 0 clamp(1.25rem, 4vw, 3rem); align-items: center;
+  }
+  .dest__port, .dest:first-child .dest__port { left: -5px; top: 2.9rem; }
+  .dest__go { right: 0; top: 1rem; }
+  .dest__viz { order: 2; margin: 0; min-height: 170px; }
+  .dest__body { order: 1; }
+}
+@media (max-width: 600px) {
+  .dest, .dest:first-child { grid-template-columns: 1fr; gap: 1.4rem; padding: 3rem 0 2rem; }
+  .dest__viz { order: 1; min-height: 0; }
+  .dest__body { order: 2; }
+  .dest__port, .dest:first-child .dest__port { top: 1.35rem; }
+  .gitgraph__tag { top: auto; bottom: -0.2rem; }
+  .idplate { width: 100%; }
+  .maze { max-width: none; }
+}
+
+/* the footer is where the line ends, not a separate block */
+.foot { border-top: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .signal__core i, .idrings i, .gg__pulse, .sl__dash.is-on { animation: none !important; }
+  .idrings i { opacity: 0.35; transform: scale(1); }
+  .idrings i:nth-child(2) { transform: scale(1.35); opacity: 0.22; }
+  .idrings i:nth-child(3) { transform: scale(1.7); opacity: 0.12; }
+  .maze i { transition-delay: 0s; }
+  .gc { transition-delay: 0s; }
+}

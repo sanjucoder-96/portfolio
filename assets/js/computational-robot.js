@@ -77,11 +77,22 @@ function heroDiagnostics(err) {
   return info;
 }
 
+/* Progress for the intro overlay (loader.js). Each stage is something that has
+   actually happened — this module evaluated, the reference decoded, the figure
+   is ready to render — never a timer. */
+function report(stage) {
+  window.__coreStage = stage;
+  try { window.dispatchEvent(new CustomEvent('core:stage', { detail: { stage } })); } catch (e) { /* no CustomEvent */ }
+}
+
 const host = document.getElementById('core-stage');
 if (host) {
+  report('engine');
   boot(host).then(() => {
     window.__coreDiag = Object.assign({ ok: true }, heroDiagnostics(null));
+    report('ready');
   }).catch((e) => {
+    report('failed');
     window.__coreDiag = Object.assign({ ok: false }, heroDiagnostics(e));
     console.error('[hero] particle figure disabled:', e.message,
                   '\nDiagnostics (also on window.__coreDiag):', window.__coreDiag);
@@ -352,6 +363,7 @@ async function boot(host) {
     };
     im.src = 'assets/references/hero-ref.webp';
   });
+  report('reference');
 
   await yieldToBrowser();
 
@@ -1393,7 +1405,10 @@ async function boot(host) {
     // ~850ms of stiffened spring, then the normal resting physics
     /* Assembly length. Long enough to watch the figure reconstruct itself,
        short enough not to hold the page hostage. */
-    gv.uIntro.value = Math.max(0, gv.uIntro.value - dt / 1.55);
+    /* The assembly only runs once the stage has been revealed. Counting from
+       boot let it play out unseen — under the intro overlay, or during a slow
+       page load — so the figure simply faded in already built. */
+    if (started || reduced) gv.uIntro.value = Math.max(0, gv.uIntro.value - dt / 1.55);
     const pu = body.gpu.variables[1].material.uniforms;
     pu.uIntro.value = gv.uIntro.value;
     pu.uTime.value = t;
@@ -1498,6 +1513,11 @@ async function boot(host) {
     },
   };
 
-  if (document.readyState === 'complete') setTimeout(start, 150);
+  /* While the intro overlay is up, the figure forms when it hands the stage over,
+     so the two read as one move. If the intro already finished (or never ran),
+     reveal as before. */
+  const intro = window.__intro;
+  if (intro && intro.active && !intro.handed) window.addEventListener('intro:handoff', start, { once: true });
+  else if (document.readyState === 'complete') setTimeout(start, 150);
   else window.addEventListener('load', () => setTimeout(start, 150), { once: true });
 }
