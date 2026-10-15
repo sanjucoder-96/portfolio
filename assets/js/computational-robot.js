@@ -870,7 +870,10 @@ async function boot(host) {
       }`,
     fragmentShader: `
       precision mediump float;
-      uniform vec3 uBody, uBody2, uHi, uAccent; uniform float uOpacity, uLight, uForm, uDesat;
+      uniform vec3 uBody, uBody2, uHi, uAccent; uniform float uOpacity, uLight, uDesat;
+      // shared with the vertex stage (highp there), so it must be highp here too: a uniform
+      // whose precision differs between stages fails to link in Firefox, and the body vanishes
+      uniform highp float uForm;
       varying float vTone, vLum, vDepth, vSpeed, vAsm, vLock; varying vec3 vRGB;
       void main(){
         vec2 c = gl_PointCoord - 0.5;
